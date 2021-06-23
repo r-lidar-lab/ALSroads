@@ -66,14 +66,17 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
   SCORE <- NA
-  new_road <- road
+  new_road <-road
   new_road$ROADWIDTH     <- NA
   new_road$DRIVABLEWIDTH <- NA
   new_road$RIGHTOFWAY    <- NA
+  new_road$PABOVE05      <- NA
+  new_road$PABOVE2       <- NA
   new_road$SINUOSITY     <- NA
   new_road$ROADWIDTH     <- NA
   new_road$SCORE         <- NA
-  new_road$STATE         <- NA
+  new_road$STATE         <- 0
+
   # reorder the columns so outputs are consistent even if exiting early
   geom <- attr(new_road, "sf_column")
   names <- names(new_road)
