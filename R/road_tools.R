@@ -100,14 +100,16 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
         Classification <- NULL
         inwater <- Z<- NULL
         water <- sf::st_buffer(water, 10)
-        water <- suppressWarnings(methods::as(water, "Spatial"))
         las <- lidR::merge_spatial(las, water, "inwater")
-        Zwater <- las$Z[las$inwater]
-        breaks <- seq(min(Zwater), max(Zwater), 0.5)
-        d <- findInterval(Zwater, breaks)
-        d <- table(d)
-        Zwater <- breaks[which.max(d)]
-        las@data[inwater == TRUE & Z < Zwater + 1, Classification := lidR::LASWATER]
+        if (any(las$inwater))
+        {
+          Zwater <- las$Z[las$inwater]
+          breaks <- seq(min(Zwater), max(Zwater), 0.5)
+          d <- findInterval(Zwater, breaks)
+          d <- table(d)
+          Zwater <- breaks[which.max(d)]
+          las@data[inwater == TRUE & Z < Zwater + 1, Classification := lidR::LASWATER]
+        }
     }
     else
     {
