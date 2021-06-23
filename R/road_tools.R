@@ -74,6 +74,14 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
   new_road$ROADWIDTH     <- NA
   new_road$STATE         <- NA
   new_road$SCORE         <- NA
+  # reorder the columns so outputs are consistent even if exiting early
+  geom <- attr(new_road, "sf_column")
+  names <- names(new_road)
+  names <- names[names != geom]
+  names <- append(names, geom)
+  data.table::setcolorder(new_road, names)
+
+  sf::st_geometry(new_road) <- geom
 
   # The roads that are too short are unlikely to be well measured. Instead of returning
   # poor results I prefer to return NA with a state 0.
