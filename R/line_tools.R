@@ -82,42 +82,61 @@ adjust_spline = function(points)
   troad <- points$distance_to_start
   wroad <- points$find_score
 
-  ux = stats::smooth.spline(troad, xroad, spar = 0.4, all.knots = TRUE)
-  uy = stats::smooth.spline(troad, yroad, spar = 0.4, all.knots = TRUE)
+  ux <- stats::smooth.spline(troad, xroad, spar = 0.4, all.knots = TRUE)
+  uy <- stats::smooth.spline(troad, yroad, spar = 0.4, all.knots = TRUE)
 
-  rm = FALSE
+  # Sometime one point is missing in the spline for an unknown reason. If the output
+  # does not have the same length than the input we resize the input to fit the output
+  # and prevent failures
+  rm <- FALSE
   if (length(ux$x) < length(troad))
   {
-    rm = troad %in% ux$x
+    rm <- troad %in% ux$x
     xroad = xroad[rm]
     yroad = yroad[rm]
     troad = troad[rm]
     wroad = wroad[rm]
   }
 
+  # Maybe it is possible to have an extra point. This case is handled here but never observed
   if (length(ux$x) > length(troad))
   {
     print(dput(points))
     stop("Different length")
   }
 
-  rmx = abs(ux$y - xroad) < 10
-  rmy = abs(uy$y - yroad) < 10
+  # The adjusted spline can be far from some outlier points. This is the role of the spline
+  # to smooth the road. But if some important outliers are detected far from the spline (more than
+  # 10 m) we remove those points and fit again the spline
+  rm2 <- FALSE
+  rmx <- abs(ux$y - xroad) < 10
+  rmy <- abs(uy$y - yroad) < 10
 
-  xroad = xroad[rmx & rmy]
-  yroad = yroad[rmx & rmy]
-  troad = troad[rmx & rmy]
-  wroad = wroad[rmx & rmy]
+  if (any(!rmx) | any(!rmy))
+  {
+    rm2   <- rmx & rmy
+    xroad <- xroad[rm2]
+    yroad <- yroad[rm2]
+    troad <- troad[rm2]
+    wroad <- wroad[rm2]
 
-  ux = stats::smooth.spline(troad, xroad, w = wroad)
-  uy = stats::smooth.spline(troad, yroad, w = wroad)
+    if (length(xroad) > 3)
+    {
+      ux <- stats::smooth.spline(troad, xroad, w = wroad)
+      uy <- stats::smooth.spline(troad, yroad, w = wroad)
+    }
+    else
+    {
+      rm2 <- FALSE
+    }
+  }
 
-  spline = sf::st_drop_geometry(points)
-  if (!isFALSE(rm)) spline = spline[rm,]
-  spline = spline[rmx & rmy,]
-  spline$x = ux$y
-  spline$y = uy$y
-  spline = sf::st_as_sf(spline, coords = c("x", "y"))
+  spline <- sf::st_drop_geometry(points)
+  if (!isFALSE(rm))  spline <- spline[rm,]
+  if (!isFALSE(rm2)) spline <- spline[rm2,]
+  spline$x <- ux$y
+  spline$y <- uy$y
+  spline <- sf::st_as_sf(spline, coords = c("x", "y"))
 
   return(sf::st_sfc(sf::st_linestring(sf::st_coordinates(spline))))
 }
