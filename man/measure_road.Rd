@@ -17,16 +17,16 @@ measure_road(road, ctg, param, water = NULL, relocate = FALSE)
 very close to river or lakes}
 
 \item{relocate}{bool. If the road is mis-positioned it will
-try to retrieve its actual location befor to compute some metrics}
+try to retrieve its actual location before to compute some metrics}
 }
 \value{
-a list with a several sf objects including stuff to debug in DEBUG +
-stuff for end use in OUTPUT
+a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +
+stuff for end user in \code{[["OUTPUT"]]}
 }
 \description{
 From a road (line), extracts the line with a buffer from the point cloud and recomputes
 the actual positioning of the road and compute some metrics for the road such as its width
-or drivable width as well as its states (exists, no longer exists)
+or drivable width as well as its state (exists, no longer exists)
 }
 \examples{
 library(lidR)

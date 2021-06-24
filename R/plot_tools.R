@@ -102,7 +102,7 @@ plot_road_metrics = function(chemin, segment_metrics, find_scores = NULL)
   if (!is.null(find_scores))
   {
     plot(find_scores, type = "l", main = "Finding scores", ylim = c(0,50))
-    abline(h = mean(find_scores, na.rm = TRUE))
+    graphics::abline(h = mean(find_scores, na.rm = TRUE))
   }
 }
 

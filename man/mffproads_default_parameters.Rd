@@ -5,7 +5,7 @@
 \alias{mffproads_default_parameters}
 \title{Parameters}
 \format{
-An object of class \code{list} of length 5.
+An object of class \code{list} of length 6.
 }
 \usage{
 mffproads_default_parameters
@@ -14,7 +14,7 @@ mffproads_default_parameters
 Parameters for function \link{measure_road}. Keeping 'as is' is recommended.
 }
 \details{
-\strong{\link{extraction}}: parameters used to extract the point cloud, process it into small sections
+\strong{extraction}: parameters used to extract the point cloud, process it into small sections
 and compute profiles
 \itemize{
 \item \strong{road_buffer}: width of the point-cloud extracted around the road
@@ -22,14 +22,14 @@ and compute profiles
 \item \strong{profile_resolution}: resolution of the profiles and DTMs
 }
 
-\strong{\link{embankments}}: parameters to detect embankments in the terrain
+\strong{embankments}: parameters to detect embankments in the terrain
 \itemize{
 \item \strong{min_slope}: slope (degrees) greater may initiate or terminate the detection of embankments
 \item \strong{max_width}: the distance between two embankments cannot be greater than that.
 Otherwise it is likely to be only random terrain variations.
 }
 
-\strong{\link{terrain}}: parameters to detect road based on the terrain aspect (excluding embankment)
+\strong{terrain}: parameters to detect road based on the terrain aspect (excluding embankment)
 \itemize{
 \item \strong{max_flat_slope}: a road is flat, max slope (degree) to be considered flat
 \item \strong{max_sd_ground_points}: point belonging on road have a low dispersion on Z.
@@ -38,14 +38,14 @@ maximum standard deviation to be considered as low dispersion
 all the points are expected to be at 0. This is the tolerance.
 }
 
-\strong{\link{vegetation}}: parameters to detect road in the vegetation gaps
+\strong{vegetation}: parameters to detect road in the vegetation gaps
 \itemize{
 \item \strong{max_percentage_point_above_50cm}: maximum allowed ratio of point above 50 cm
 \item \strong{max_percentage_point_above_10cm}: maximum allowed ratio of point above 10 cm
 \item \strong{max_stdz}: maximum allowed standard deviation on Z
 }
 
-\strong{\link{state}}: parameters to evaluate the state of a section
+\strong{state}: parameters to evaluate the state of a section
 \itemize{
 \item \strong{percentage_veg_thresholds}:
 \item \strong{drivable_width_thresholds}:
