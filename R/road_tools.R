@@ -84,8 +84,6 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
   names <- append(names, geom)
   data.table::setcolorder(new_road, names)
 
-  sf::st_geometry(new_road) <- geom
-
   # The roads that are too short are unlikely to be well measured. Instead of returning
   # poor results I prefer to return NA with a state 0.
   if (sf::st_length(road) < units::as_units(75, "m"))
