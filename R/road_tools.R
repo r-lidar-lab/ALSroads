@@ -76,6 +76,7 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
   new_road$ROADWIDTH     <- NA
   new_road$SCORE         <- NA
   new_road$STATE         <- 0
+  new_road$RLEN          <- 1
 
   # reorder the columns so outputs are consistent even if exiting early
   geom <- attr(new_road, "sf_column")
@@ -144,21 +145,34 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
   # Aggregate metrics for the whole road from each segment
   metrics <- road_metrics(new_road, segment_metrics_, find_scores)
   metrics$SCORE <- SCORE
-  metrics$STATE <- road_state(segment_metrics_, param, find_scores)
+  metrics[["STATE"]] <- road_state(segment_metrics_, param, find_scores)
 
   # Merge the tables of attributes
-  original_geometry <-  sf::st_geometry(road)
+  original_geometry <- sf::st_geometry(road)
   new_geometry <- sf::st_geometry(new_road)
   attribute_table <- cbind(sf::st_drop_geometry(road), metrics)
-  attribute_table$geom <- if (metrics$STATE > 2)  original_geometry else new_geometry
+  attribute_table[["geom"]] <- new_geometry
+
+  # Does it really looks like a road? Compute some shape metric to verify
+  attribute_table[["RLEN"]] <- as.numeric(sf::st_length(new_geometry)/sf::st_length(original_geometry))
+
+  # Test the shape metrics and modify the state if if does not look like a road
+  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.3)
+    attribute_table[["STATE"]] <- 3
+
+  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.5 )
+    attribute_table[["STATE"]] <- 4
+
+  if (attribute_table[["STATE"]] > 2)
+    attribute_table[["geom"]] <- original_geometry
+
   new_road <- sf::st_as_sf(attribute_table)
   sf::st_crs(new_road) <- sf::st_crs(road)
 
   if (getOption("MFFProads.debug") == FALSE)
     return(new_road)
   else
-    return(list(new_road = new_road,
-                raw_location = segment_locations_))
+    return(list(new_road = new_road, raw_location = segment_locations_))
 }
 
 #' Generic function to loop through all sections of a road and compute either some metrics
