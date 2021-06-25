@@ -157,11 +157,11 @@ measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
   attribute_table[["RLEN"]] <- as.numeric(sf::st_length(new_geometry)/sf::st_length(original_geometry))
 
   # Test the shape metrics and modify the state if if does not look like a road
-  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.3)
-    attribute_table[["STATE"]] <- 3
+  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.1)
+    attribute_table[["STATE"]] <- 3L
 
-  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.5 )
-    attribute_table[["STATE"]] <- 4
+  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.3 )
+    attribute_table[["STATE"]] <- 4L
 
   if (attribute_table[["STATE"]] > 2)
     attribute_table[["geom"]] <- original_geometry
@@ -403,7 +403,7 @@ road_state = function(segment_metrics, param, find_scores = NULL)
     0,
     ifelse(
       drivable_width >= p[1] & drivable_width <= p[2],
-      (drivable_width-1)/(p[2]-p[1])*100,
+      (drivable_width-p[1])/(p[2]-p[1])*100,
       100)
   )
 
@@ -417,7 +417,7 @@ road_state = function(segment_metrics, param, find_scores = NULL)
       0,
       ifelse(
         find_scores >= p[1] & find_scores <= p[2],
-        (find_scores-1)/(p[2]-p[1])*100,
+        (find_scores-p[1])/(p[2]-p[1])*100,
         100)
     )
   }
