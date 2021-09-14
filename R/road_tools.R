@@ -1,200 +1,136 @@
-#' Align and measure a road from Lidar data
-#'
-#' From a road (line), extracts the line with a buffer from the point cloud and recomputes
-#' the actual positioning of the road and compute some metrics for the road such as its width
-#' or drivable width as well as its state (exists, no longer exists)
-#'
-#' @param road a single line (sf format)
-#' @param ctg a non-normalized LAScatalog object from lidR package
-#' @param param a list of many parameters
-#' @param water a set of polygons (sf format) of water bodies. This can help the method for road
-#' very close to river or lakes
-#' @param relocate bool. If the road is mis-positioned it will
-#' try to retrieve its actual location before to compute some metrics
-#'
-#' @return a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +
-#' stuff for end user in \code{[["OUTPUT"]]}
-#' @export
-#' @examples
-#' library(lidR)
-#' library(sf)
-#'
-#' dir  <- system.file("extdata", "", package="MFFProads")
-#' file <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
-#' ctg  <- readLAScatalog(dir)
-#' road <- st_read(file, quiet = TRUE)
-#'
-#' plot(ctg)
-#' plot(st_geometry(road), add = TRUE, col = "red")
-#'
-#' res <- measure_road(road, ctg, mffproads_default_parameters, relocate = TRUE)
-#'
-#' plot(st_geometry(road), col = "red") # Inaccurate road track
-#' plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
-#'
-#' mapview::mapview(list(road, res),
-#'   layer.name = c("Inaccurate", "Corrected"),
-#'   color = c("red", "blue"), map.type = "Esri.WorldImagery")
-#'
-#' \dontrun{
-#' # DEBUG
-#'
-#' options(MFFProads.debug.finding = TRUE)
-#' options(MFFProads.debug.measuring = FALSE)
-#' options(MFFProads.debug.metrics = FALSE)
-#' res <- measure_road(road, ctg, mffproads_default_parameters, relocate = TRUE)
-#'
-#' options(MFFProads.debug.finding = FALSE)
-#' options(MFFProads.debug.measuring = TRUE)
-#' options(MFFProads.debug.metrics = FALSE)
-#' res <- measure_road(road, ctg, mffproads_default_parameters, relocate = TRUE)
-#'
-#' options(MFFProads.debug.finding = FALSE)
-#' options(MFFProads.debug.measuring = FALSE)
-#' options(MFFProads.debug.metrics = TRUE)
-#' res <- measure_road(road, ctg, mffproads_default_parameters, relocate = TRUE)
-#' }
-#' @useDynLib MFFProads, .registration = TRUE
-#' @import data.table
-measure_road = function(road, ctg, param, water = NULL, relocate = FALSE)
-{
-  if (sf::st_geometry_type(road) != "LINESTRING") stop("Expecting LINESTRING geometry for 'road'", call. = FALSE)
-  if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
-  if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAscatalog", call. = FALSE)
-  lidR:::assert_is_a_bool(relocate)
-  if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
-
-  # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
-  SCORE <- NA
-  new_road <-road
-  new_road$ROADWIDTH     <- NA
-  new_road$DRIVABLEWIDTH <- NA
-  new_road$RIGHTOFWAY    <- NA
-  new_road$PABOVE05      <- NA
-  new_road$PABOVE2       <- NA
-  new_road$SINUOSITY     <- NA
-  new_road$ROADWIDTH     <- NA
-  new_road$SCORE         <- NA
-  new_road$STATE         <- 0
-  new_road$RLEN          <- 1
-
-  # reorder the columns so outputs are consistent even if exiting early
-  geom <- attr(new_road, "sf_column")
-  names <- names(new_road)
-  names <- names[names != geom]
-  names <- append(names, geom)
-  data.table::setcolorder(new_road, names)
-
-  # The roads that are too short are unlikely to be well measured. Instead of returning
-  # poor results I prefer to return NA with a state 0.
-  if (sf::st_length(road) < units::as_units(75, "m"))
-  {
-    warning("Road too short to be reliably measured", call. = FALSE)
-    return(new_road)
-  }
-
-  # Query the roads in a collection of files
-  las <- extract_road(ctg, road, param)
-
-  if (lidR::is.empty(las))
-  {
-    warning("No point found.", call. = FALSE)
-    return(new_road)
-  }
-
-  # Classify water
-  if (!is.null(water))
-  {
-    if (nrow(water) > 0L)
-    {
-        Classification <- NULL
-        inwater <- Z<- NULL
-        water <- sf::st_buffer(water, 10)
-        las <- lidR::merge_spatial(las, water, "inwater")
-        if (any(las$inwater))
-        {
-          Zwater <- las$Z[las$inwater]
-          breaks <- seq(min(Zwater), max(Zwater), 0.5)
-          d <- findInterval(Zwater, breaks)
-          d <- table(d)
-          Zwater <- breaks[which.max(d)]
-          las@data[inwater == TRUE & Z < Zwater + 1, Classification := lidR::LASWATER]
-        }
-    }
-    else
-    {
-      water = NULL
-    }
-  }
-
-  # If we can't assume that the road is correctly positioned we need to recompute its
-  # location accurately
-  find_scores <- NULL
-  if (relocate)
-  {
-    segment_locations_ <- road_relocate(las, road, param)
-    find_scores <- segment_locations_$find_score
-    SCORE <- stats::median(find_scores, na.rm = TRUE)
-    new_road <- adjust_spline(segment_locations_)
-  }
-
-  # From the correctly located road, compute the metrics for each location
-  if (relocate) param$extraction$road_buffer = param$extraction$road_buffer/2
-  segment_metrics_ <- road_measure(las, new_road, param)
-
-  # Aggregate metrics for the whole road from each segment
-  metrics <- road_metrics(new_road, segment_metrics_, find_scores)
-  metrics$SCORE <- SCORE
-  metrics[["STATE"]] <- road_state(segment_metrics_, param, find_scores)
-
-  # Merge the tables of attributes
-  original_geometry <- sf::st_geometry(road)
-  new_geometry <- sf::st_geometry(new_road)
-  attribute_table <- cbind(sf::st_drop_geometry(road), metrics)
-  attribute_table[["geom"]] <- new_geometry
-
-  # Does it really looks like a road? Compute some shape metric to verify
-  attribute_table[["RLEN"]] <- as.numeric(sf::st_length(new_geometry)/sf::st_length(original_geometry))
-
-  # Test the shape metrics and modify the state if if does not look like a road
-  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.1)
-    attribute_table[["STATE"]] <- 3L
-
-  if (attribute_table[["STATE"]] <= 2 && attribute_table[["RLEN"]] > 1.3 )
-    attribute_table[["STATE"]] <- 4L
-
-  if (attribute_table[["STATE"]] > 2)
-    attribute_table[["geom"]] <- original_geometry
-
-  new_road <- sf::st_as_sf(attribute_table)
-  sf::st_crs(new_road) <- sf::st_crs(road)
-
-  if (getOption("MFFProads.debug") == FALSE)
-    return(new_road)
-  else
-    return(list(new_road = new_road, raw_location = segment_locations_))
-}
-
-#' Generic function to loop through all sections of a road and compute either some metrics
-#' or the actual location of the road if the reference one is mispositioned
+#' Compute the "average" metrics for the road from all the metrics of each segment
 #'
 #' @param road a single spatial line in sf format
-#' @param las a non-normalized LAS point cloud coming with a spatial index
-#' @param dtm a DTM corresponding to the LAS point cloud
-#' @param param a list of many parameters
-#' @param mode can be 'find' or 'measure' to work either in search mode or measurement mode
+#' @param segment_metrics the metric of each segment as outputted by road_generic_loop(..., mode = "measure")
 #'
-#' @return a data.table with one row per segment and on column per metrics
+#' @return An updated road with the metrics including the average state, width, drivable width, ...
 #' @noRd
-road_generic_loop = function(road, las, param, mode = 'measure')
+road_metrics =  function(road, segment_metrics)
+{
+  # Average percentage of point above x
+  avg_percentage_above_05 = round(mean(segment_metrics[["pzabove05"]]), 1)
+  avg_percentage_above_2 = round(mean(segment_metrics[["pzabove2"]]), 1)
+
+  # Average width
+  road_width <- round(mean(segment_metrics[["road_width"]]), 1)
+
+  # Average drivable width.
+  drivable_width <- round(mean(segment_metrics[["drivable_width"]]), 1)
+
+  # Measure of the right of way not available yet
+  right_of_way <- NA_real_
+
+  # Sinuosity on XY and on Z
+  z <- segment_metrics[["zroad"]]
+  x <- segment_metrics[["distance_to_start"]]
+  S <- round(sinuosity(road), 2)
+
+  road_metrics = data.frame(
+    ROADWIDTH = road_width,
+    DRIVABLEWIDTH = drivable_width,
+    RIGHTOFWAY = right_of_way,
+    PABOVE05 = avg_percentage_above_05,
+    PABOVE2 = avg_percentage_above_2,
+    SINUOSITY = S,
+    SCORE = road$SCORE)
+
+  if (getOption("MFFProads.debug.metrics")) plot_road_metrics(road, road_metrics, segment_metrics)
+
+  return(road_metrics)
+}
+
+road_state = function(segment_metrics, score, param)
+{
+  pzabove05 = segment_metrics$pzabove05
+  drivable_width = segment_metrics$drivable_width
+  embankement = mean(segment_metrics$number_accotements)
+
+  # The overall state is the median state
+  # Estimate the existence of a road in the segment based on percentage of veg points and width
+  p <- param[["state"]][["percentage_veg_thresholds"]]
+  road_exist <- ifelse(
+    pzabove05 > p[3],
+    0,
+    ifelse (
+      pzabove05 >= p[1] & pzabove05 <= p[2],
+      100-(pzabove05-p[1])/((p[2]-p[1])/100),
+      100)
+    )
+
+  p <- param[["state"]][["drivable_width_thresholds"]]
+  drivable_exist <- ifelse(
+    drivable_width < p[1],
+    0,
+    ifelse(
+      drivable_width >= p[1] & drivable_width <= p[2],
+      (drivable_width-p[1])/(p[2]-p[1])*100,
+      100)
+  )
+
+  p <- param[["state"]][["score_thresholds"]]
+  score_exist <- ifelse(
+    score < p[1],
+    0,
+    ifelse(
+      score >= p[1] & score <= p[2],
+      (score-p[1])/(p[2]-p[1])*100,
+      100)
+  )
+
+  embamkement_exist = embankement/2
+
+  pexist <- mean(c(road_exist, drivable_exist), na.rm = TRUE)
+  pexist <- (2*pexist + score_exist + embamkement_exist) / 4
+  state <- 5 - as.integer(cut(pexist, breaks = c(-1,20,40,70,101)))
+  return(state)
+}
+
+road_relocate = function(las, road, dtm, water, param)
+{
+  poly2 <- sf::st_buffer(road, param$extraction$road_buffer/2)
+
+  dtm <- raster::crop(dtm, poly2)
+  dtm <- raster::mask(dtm, poly2)
+
+  res <- round(raster::res(dtm)[1], 2)
+  if (res < 1)
+    dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
+  else if (res > 1)
+    stop("The DTM must have a resolution of 1 m or less.")
+
+  # Compute high resolution conductivity map
+  conductivities <- grid_conductivity(las, road, dtm, water)
+  conductivity <- conductivities$conductivity
+  #plot(conductivity,  col = viridis::inferno(20), main = "High res conductivity")
+  #plot(chemin, add = T, col = "yellow")
+
+  # Compute low resolution conductivity with mask
+  conductivity <- mask_conductivity(conductivity, road, param)
+  #plot(conductivity,  col = viridis::inferno(20), main = "Low res conductivity")
+  #plot(chemin, add = T, col = "red")
+
+  # Compute start and end points
+  AB <- start_end_points(road, param)
+  A  <- AB$A
+  B  <- AB$B
+  #points(A, col = "red")
+  #points(B, col = "red")
+
+  # Compute the transition
+  cat("Computing graph map...\n")
+  trans <- gdistance::transition(conductivity, transitionFunction = mean, directions = 8)
+  trans <- gdistance::geoCorrection(trans)
+
+  # Find the path
+  cat("Computing least cost path...\n")
+  path <- find_path(trans, road, A, B, param)
+
+  return(path)
+}
+
+road_measure = function(las, road, param)
 {
   if (is.null(las@index[["quadtree"]]))  stop("The point cloud is not spatially indexed", call. = TRUE)
-  mode <- match.arg(mode, choices = c("measure", "find"))
-
-  # xc is the location of the road. In search mode it is equal to "find" because
-  # we are searching it. Otherwise it is NULL because we know that the road is at 0.
-  # Indeed we extracted the point cloud based on the centre line.
-  xc <- if (mode == 'find') "find" else NULL
 
   # Retrieve start and end points of the road
   coords_road <- sf::st_coordinates(road)
@@ -218,25 +154,17 @@ road_generic_loop = function(road, las, param, mode = 'measure')
   pdist <- dist/dist[length(dist)]
   points$DISTANCE <- path_lenght*pdist
 
-  # previous_xc records the last two positions of the road. In 'measure' mode it is NULL
-  # because we now that the road it at 0 but in search mode we used the last two finding
-  # to help getting consistent and robust positioning. It is initialized to Inf because
-  # we don't know were is the road.
-  prev_xc = if (mode == "find") c(Inf, Inf) else NULL
-
   # We can now loop through each segment between two consecutive points
   n <- nrow(CC)
   ids <- 1:(n-1)
   .segment_metrics <- vector("list", n)
   for (i in ids)
   {
-    # update progress estimation
-    if (mode == "find")
-      cat("Searching the road true position ", round(i/length(ids)*100,0), "%\r", sep = "")
-    else
-      cat("Computing the road metrics ", round(i/length(ids)*100,0), "%\r", sep = "")
-
-    utils::flush.console()
+    if (i%%3 == 0)
+    {
+      cat("Computing road metrics... ", round(i/length(ids)*100,0), "%\r", sep = "")
+      utils::flush.console()
+    }
 
     # Extraction of the segment
     p1 <- CC[i,1:2]
@@ -261,7 +189,7 @@ road_generic_loop = function(road, las, param, mode = 'measure')
     # along the road are allowed with the try-catch block
     nlas_segment <- tryCatch(
     {
-       lidR::normalize_height(las_segment, lidR::tin(), Wdegenerated = FALSE, na.rm = TRUE)
+      lidR::normalize_height(las_segment, lidR::tin(), Wdegenerated = FALSE, na.rm = TRUE)
     },
     error = function(e)
     {
@@ -299,147 +227,28 @@ road_generic_loop = function(road, las, param, mode = 'measure')
     # /!\ Here again there are many rare cases were it could fail such as water only + bridge,
     # missing points. Hard to find each specific case. Few error along the road are allowed
     # with the try-catch block
-    m <- tryCatch(
-    {
-      if (mode == "find")
-        m <- segment_location_metrics(nlas_segment, param, prev_xc)
-      else
-        m <- segment_road_metrics(nlas_segment, param)
-
-      m
-    },
-    error = function(e)
-    {
-      f <- tempfile(fileext = ".las")
-      nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
-      lidR::writeLAS(nlas_segment, f)
-      message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
-      message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics() called with prev_xc = {cat(prev_xc)}"))
-      return(NULL)
-    })
+    m <- tryCatch({ segment_road_metrics(nlas_segment, param)},
+      error = function(e)
+      {
+        f <- tempfile(fileext = ".las")
+        nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
+        lidR::writeLAS(nlas_segment, f)
+        message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
+        message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics() called with prev_xc = {cat(prev_xc)}"))
+        return(NULL)
+      })
 
     if (is.null(m)) next
 
     # We add some additional metrics to know the "temporal" location of this segment
-    # and record the original position of the road + we updated privious locations
+    # and record the original position of the road + we updated previous locations
     m$distance_to_start <- points[["DISTANCE"]][i]
-    if (mode == "find")
-    {
-      m$xref <- center[1]
-      m$yref <- center[2]
-      prev_xc[2] <- prev_xc[1]
-      prev_xc[1] <- m$xc
-    }
-
     .segment_metrics[[i]] <- m
   }
 
-  cat("\n")
+  cat("Computing road metrics... 100%\n")
 
   return(data.table::rbindlist(.segment_metrics))
-}
-
-#' Compute the "average" metrics for the road from all the metrics of each segment
-#'
-#' @param road a single spatial line in sf format
-#' @param segment_metrics the metric of each segment as outputted by road_generic_loop(..., mode = "measure")
-#'
-#' @return An updated road with the metrics including the average state, width, drivable width, ...
-#' @noRd
-road_metrics =  function(road, segment_metrics, find_scores = NULL)
-{
-  # Average percentage of point above x
-  avg_percentage_above_05 = round(mean(segment_metrics[["pzabove05"]]), 1)
-  avg_percentage_above_2 = round(mean(segment_metrics[["pzabove2"]]), 1)
-
-  # Average width
-  road_width <- round(mean(segment_metrics[["road_width"]]),1)
-
-  # Average drivable width.
-  drivable_width <- round(mean(segment_metrics[["drivable_width"]]), 1)
-
-  # Measure of the right of way not available yet
-  right_of_way <- NA_real_
-
-  # Sinuosity on XY and on Z
-  z <- segment_metrics[["zroad"]]
-  x <- segment_metrics[["distance_to_start"]]
-  S <- round(sinuosity(road), 2)
-
-  road_metrics = data.frame(
-    ROADWIDTH = road_width,
-    DRIVABLEWIDTH = drivable_width,
-    RIGHTOFWAY = right_of_way,
-    PABOVE05 = avg_percentage_above_05,
-    PABOVE2 = avg_percentage_above_2,
-    SINUOSITY = S)
-
-  if (getOption("MFFProads.debug.metrics")) plot_road_metrics(road_metrics, segment_metrics, find_scores)
-
-  return(road_metrics)
-}
-
-road_state = function(segment_metrics, param, find_scores = NULL)
-{
-  n = 2
-  pzabove05 = segment_metrics$pzabove05
-  drivable_width = segment_metrics$drivable_width
-
-  # The overall state is the median state
-  # Estimate the existence of a road in the segment based on percentage of veg points and width
-  p <- param[["state"]][["percentage_veg_thresholds"]]
-  road_exist <- ifelse(
-    pzabove05 > p[3],
-    0,
-    ifelse (
-      pzabove05 >= p[1] & pzabove05 <= p[3],
-      100-(pzabove05-p[1])/((p[3]-p[1])/100),
-      100)
-    )
-
-  p <- param[["state"]][["drivable_width_thresholds"]]
-  drivable_exist <- ifelse(
-    drivable_width < p[1],
-    0,
-    ifelse(
-      drivable_width >= p[1] & drivable_width <= p[2],
-      (drivable_width-p[1])/(p[2]-p[1])*100,
-      100)
-  )
-
-  score_exist = 0
-  if (!is.null(find_scores))
-  {
-    n <- 3
-    p <- param[["state"]][["score_thresholds"]]
-    score_exist <- ifelse(
-      find_scores < p[1],
-      0,
-      ifelse(
-        find_scores >= p[1] & find_scores <= p[2],
-        (find_scores-p[1])/(p[2]-p[1])*100,
-        100)
-    )
-  }
-
-  pexist <- (mean(road_exist, na.rm = TRUE) + mean(drivable_exist, na.rm = TRUE) + mean(score_exist, na.rm = TRUE))/n
-  state <- 5 - as.integer(cut(pexist, breaks = c(-1,20,40,70,101)))
-  state <- round(stats::median(state, 0))
-
-  return(state)
-}
-
-road_relocate = function(las, road, param)
-{
-  distance_to_start <- NULL
-  segment_locations <- road_generic_loop(road, las, param, mode = 'find')
-  data.table::setorder(segment_locations, distance_to_start)
-  segment_locations <- sf::st_as_sf(segment_locations, coords = c("xroad", "yroad"))
-}
-
-road_measure = function(las, road, param)
-{
-  road_generic_loop(road, las, param, mode = 'measure')
 }
 # get_zline = function(las, roads)
 # {

@@ -22,6 +22,8 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   graphics::abline(v = m$drivable_edges, lty = 3, col = "darkgreen")
   graphics::abline(v = m$rescue_edges, lty = 3, col = "red")
 
+  graphics::abline(v = m$xc, lty = 3, col = "purple")
+
   graphics::arrows(m$accotement$left$start, -2, m$accotement$right$start, -2, code = 3, length = 0.1, col = "blue")
   graphics::text(mean(c(m$accotement$left$start, m$accotement$right$start)), -2.5, paste0(m$accotement$right$start-m$accotement$left$start, " m"), col = "blue")
 
@@ -60,50 +62,59 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   #text(mean(m$drivable_edge), 14.7, paste0(m$drivable_width, " m"))
 }
 
-plot_road_metrics = function(chemin, segment_metrics, find_scores = NULL)
+plot_road_metrics = function(chemin, road_metrics, segment_metrics)
 {
   opar = graphics::par(mfrow=c(3,3))
   on.exit({graphics::par(opar)})
 
   #plot((seq_along(zroad)-1)*10, zroad, type = "l", asp = 1, xlab = "X", ylab = "Z")
 
-  seuils = c(0,20,40,70)
-  cols = c("darkgreen", "orange", "red", "black")
+  seuils = c(0, param$state$percentage_veg_thresholds)
+  cols = c("darkgreen", "orange", "red")
 
-  col = cols[data.table::last(which(seuils < chemin$PABOVE2))]
+  col = cols[data.table::last(which(seuils < road_metrics$PABOVE2))]
   plot(segment_metrics$pzabove2, type = "l", ylim = c(0, 100), main = "% points above 2 m", ylab = "%")
-  graphics::abline(h = chemin$PABOVE2, col = col)
+  graphics::abline(h = road_metrics$PABOVE2, col = col)
   graphics::abline(h = seuils[1], col = cols[1], lty = 3)
   graphics::abline(h = seuils[2], col = cols[2], lty = 3)
   graphics::abline(h = seuils[3], col = cols[3], lty = 3)
-  graphics::abline(h = seuils[4], col = cols[4], lty = 3)
 
-  col = cols[data.table::last(which(seuils < chemin$PABOVE05))]
+  col = cols[data.table::last(which(seuils < road_metrics$PABOVE05))]
   plot(segment_metrics$pzabove05, type = "l", ylim = c(0, 100), main = "% points above 0.5 m", ylab = "%")
-  graphics::abline(h = chemin$PABOVE05, col = col)
+  graphics::abline(h = road_metrics$PABOVE05, col = col)
   graphics::abline(h = seuils[1], col = cols[1], lty = 3)
   graphics::abline(h = seuils[2], col = cols[2], lty = 3)
   graphics::abline(h = seuils[3], col = cols[3], lty = 3)
-  graphics::abline(h = seuils[4], col = cols[4], lty = 3)
+
 
   plot(segment_metrics$road_width, type = "l", xaxt="n", main = "Road width profile", ylim = c(0, max(segment_metrics$road_width)))
   graphics::axis(1, at = 1:nrow(segment_metrics), las = 2)
-  graphics::abline(h = chemin$ROADWIDTH, col = "blue", lwd = 2)
+  graphics::abline(h = road_metrics$ROADWIDTH, col = "blue", lwd = 2)
 
-  col = rev(cols)[data.table::first(which(seuils > chemin$DRIVABLEWIDTH))]
+  cols = rev(cols)
+  seuils = c(0, param$state$drivable_width_thresholds)
+  col = cols[data.table::last(which(seuils < road_metrics$DRIVABLEWIDTH))]
+
   plot(segment_metrics$drivable_width, type = "l", xaxt="n", main = "Drivable width profile", ylim = c(0, max(segment_metrics$drivable_width)))
   graphics::axis(1, at = 1:nrow(segment_metrics), las = 2)
-  graphics::abline(h = mean(chemin$DRIVABLEWIDTH), col = col, lwd = 2)
+  graphics::abline(h = mean(road_metrics$DRIVABLEWIDTH), col = col, lwd = 2)
+  graphics::abline(h = seuils[1], col = cols[1], lty = 3)
+  graphics::abline(h = seuils[2], col = cols[2], lty = 3)
+  graphics::abline(h = seuils[3], col = cols[3], lty = 3)
 
   plot(segment_metrics$number_accotements, type = "l", xaxt="n", main = "Number of embankments", ylim = c(0, 2))
   graphics::axis(1, at = 1:nrow(segment_metrics), las = 2)
   graphics::abline(h = mean(segment_metrics$number_accotements), col = "red", lwd = 2)
 
-  if (!is.null(find_scores))
-  {
-    plot(find_scores, type = "l", main = "Finding scores", ylim = c(0,50))
-    graphics::abline(h = mean(find_scores, na.rm = TRUE))
-  }
+  seuils = c(param$state$score_thresholds, 1)
+  cols = c("red", "orange", "darkgreen")
+
+  score = chemin$SCORE
+  col = cols[data.table::first(which(seuils > score))]
+  plot(sf::st_geometry(chemin), col = col, main = paste0("Score = ", score))
+  graphics::axis(1)
+  graphics::axis(2)
+  graphics::box()
 }
 
 add_road_insert = function(chemin, i, p1, p2, col)

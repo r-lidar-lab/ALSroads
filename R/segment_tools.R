@@ -1,45 +1,3 @@
-#' Computes some profile from a section of a point cloud (approximately) perpendicular
-#' to a road and retrieve the road or measure the road if we are sure that the section
-#' is exactly centred and perpendicular to the road
-#'
-#' @param nlas_segment a normalized section perpendicular to the road. Should be unnormalizable
-#' @param param a list of many parameters
-#' @param xc can be 'find' or 'NULL' to work either in search mode or measurement mode
-#'
-#' @return a list of metrics depending on the mode used (eg. road positions or road size and state)
-#' @noRd
-#'
-segment_location_metrics = function(nlas_segment, param, prev_xc = NULL)
-{
-  # We need both normalized and normalized versions
-  las_segment <- lidR::unnormalize_height(nlas_segment)
-
-  # In search mode we search the road
-  out <- find_road(nlas_segment, param, prev_xc)
-  score <- out$score
-  xc <- out$xc
-  if (is.null(xc))
-    return(NULL)
-
-  # Location of the road in the original CRS
-  rot <- attributes(las_segment)$rotation
-  off <- attributes(las_segment)$offset
-
-  yc <- mean(range(las_segment$X))
-  xyc <- cbind(yc, xc)%*%t(rot)
-  xyc[,1] <- xyc[,1] + off[1]
-  xyc[,2] <- xyc[,2] + off[2]
-
-  # Store the metrics
-  m = list(
-    xroad = xyc[,1],
-    yroad = xyc[,2],
-    xc = xc,
-    find_score = score)
-
-    return(m)
-}
-
 #' Computes size and state metrics of a given section
 #'
 #' Computes
@@ -55,11 +13,13 @@ segment_road_metrics = function(nlas_segment, param)
   # Compute some profiles of vegetation to detect some open areas
   dd2 <- compute_veg_profiles(nlas_segment, res = param[["extraction"]][["profile_resolution"]])
 
-  # Retrieve a more accurate road centre at +/- 2m around current centre
+  # Retrieve a more accurate road centre at +/- 5m around current centre
   # in case the map provided is no strictly exact
   Xr <- Y <- NULL
-  around_center <- dd2[Xr >= xc-2 & Xr <= xc + 2]
-  y <- mean(around_center$Xr[which(around_center$nabove05 < 5)])
+  D <- dd2[Xr >= xc-7 & Xr <= xc + 7]
+  sdZ = ma(D$sdZ, 12)
+  i = which.min(sdZ)
+  y <- D$Xr[i]
   if (!is.nan(y)) xc = y
 
   # Normalize but relatively to the road only to get a flat and horizontal road
@@ -85,7 +45,7 @@ segment_road_metrics = function(nlas_segment, param)
   right = if (!accotement$right$embankment) rescue_edges[2] else accotement$right$start
   road_edges <- c(left, right)
 
-  # Using the road edges and vegetation profile we can estimate the drivable edged
+  # Using the road edges and vegetation profile we can estimate the drivable edges
   drivable_edges <- find_drivable_edges(dd2, road_edges)
 
   # Compute different estimation of the width

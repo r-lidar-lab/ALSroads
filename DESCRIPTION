@@ -1,7 +1,7 @@
 Package: MFFProads
 Type: Package
 Title: Road alignment and measure from airborne LiDAR data for MFFP
-Version: 0.1.0
+Version: 0.2.0
 Author: Jean-Romain Roussel
 Maintainer: Jean-Romain Roussel <jean-romain.roussel.1@ulaval.ca>
 Description: Functions to realign miss-positionned roads from a maintained map of roads 
@@ -12,7 +12,6 @@ Encoding: UTF-8
 Imports: 
     lidR,
     sf,
-    units,
     zoo,
     stats,
     Rcpp,
@@ -21,10 +20,14 @@ Imports:
     lwgeom,
     glue,
     methods,
-    utils
+    utils,
+    gdistance,
+    EBImage,
+    rgdal
 Suggests:
-    mapview
-RoxygenNote: 7.1.1
+    mapview,
+    viridis
+RoxygenNote: 7.1.2
 LinkingTo: 
     Rcpp,
     lidR

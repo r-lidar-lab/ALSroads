@@ -20,7 +20,7 @@ sinuosity.matrix = function(x)
 
 sinuosity.sf <- function(x)
 {
-  lines = x
+  lines <- x
   n <- nrow(lines)
   S <- numeric(n)
   for (i in 1:n)
@@ -30,7 +30,7 @@ sinuosity.sf <- function(x)
     if (sf::st_geometry_type(line) != "LINESTRING")
       stop(paste0("Geometry ", i, " is not a LINESTRING"))
 
-    S[i] <- sinuosity(line)
+    S[i] <- sinuosity.sfc_LINESTRING(line)
   }
 
   round(S,2)
@@ -39,7 +39,7 @@ sinuosity.sf <- function(x)
 sinuosity.sfc_LINESTRING <- function(x)
 {
   XY <- sf::st_coordinates(x)
-  return(sinuosity(XY))
+  return(sinuosity.matrix(XY))
 }
 
 cut_line <- function(line, at, metrics)
