@@ -23,7 +23,8 @@ Imports:
     utils,
     gdistance,
     EBImage,
-    rgdal
+    rgdal,
+    fasterize
 Suggests:
     mapview,
     viridis

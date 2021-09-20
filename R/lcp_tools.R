@@ -97,7 +97,15 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   dt <- system.time({
   q <- stats::quantile(las$Intensity, probs = 0.98)
-  irange <- lidR::grid_metrics(las, ~diff(range(Intensity)), dtm, filter = ~Intensity < 2*q)
+  nlas@data[Intensity > 2*q, Intensity := 2*q]
+
+  Z = nlas$Z
+  nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
+  irange <- lidR:::rOverlay(nlas, dtm, buffer = 0)
+  imax   <- lidR:::C_rasterize(nlas, irange, FALSE, 1L)
+  imin   <- lidR:::C_rasterize(nlas, irange, FALSE, 2L)
+  irange[] <- imax - imin
+  nlas@data[["Z"]] <- Z
 
   if (getOption("MFFProads.debug.finding"))
     raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
@@ -207,6 +215,7 @@ mask_conductivity <- function(conductivity, road, param)
   sf::st_agr(poly1) <- "constant"
   sf::st_agr(poly2) <- "constant"
   poly3 <- sf::st_difference(poly2, poly1)
+  poly4 <- sf::st_buffer(road, 1)
 
   conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
   conductivity <- raster::mask(conductivity, poly2)
@@ -215,7 +224,7 @@ mask_conductivity <- function(conductivity, road, param)
 
   dt <- system.time({
   # Confidence factor
-  f <- raster::rasterize(road, conductivity)
+  f <- fasterize::fasterize(poly4, conductivity)
   f <- raster::distance(f)
 
   f <- raster::mask(f, poly2)
@@ -228,11 +237,18 @@ mask_conductivity <- function(conductivity, road, param)
 
 
   dt <- system.time({
-  conductivity <- f*conductivity
-  cells <- raster::cellFromPolygon(conductivity, sf::as_Spatial(poly3))
-  conductivity[cells[[1]]] <- 1
+    # could use raster::cellFromPolygon but is slow
+    conductivity <- f*conductivity
+    xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
+    xy <- as.data.frame(xy)
+    xy$z <- 0
+    names(xy) <- c("X", "Y", "Z")
+    xy <- LAS(xy, LASheader(xy))
+    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(poly3)), 1)
+    conductivity[res] <- 1
   })
   cat("   - Add full conductivity end blocks in ", round(dt[3],2), "s \n", sep = "")
+
 
   return(conductivity)
 }
