@@ -140,3 +140,17 @@ adjust_spline = function(points)
 
   return(sf::st_sfc(sf::st_linestring(sf::st_coordinates(spline))))
 }
+
+st_merge_line = function(x)
+{
+  sf::st_geometry(sf::st_linestring(sf::st_coordinates(sf::st_cast(sf::st_geometry(x), "POINT"))))
+}
+
+st_is_loop = function(line)
+{
+  # Exit early for loops because does not work (yet?)
+  p1 <- lwgeom::st_startpoint(line)
+  p2 <- lwgeom::st_endpoint(line)
+  d  <- as.numeric(sf::st_distance(p1,p2)[1,1])
+  return(d < 2)
+}

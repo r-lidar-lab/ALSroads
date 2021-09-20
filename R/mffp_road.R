@@ -87,7 +87,6 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   new_road$PABOVE05      <- NA
   new_road$PABOVE2       <- NA
   new_road$SINUOSITY     <- NA
-  new_road$ROADWIDTH     <- NA
   new_road$CONDUCTIVITY  <- NA
   new_road$SCORE         <- NA
   new_road$STATE         <- 0
@@ -99,12 +98,31 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   names <- append(names, geom)
   data.table::setcolorder(new_road, names)
 
-  # Exit early for loops because does not work (yet?)
-  p1 <- lwgeom::st_startpoint(road)
-  p2 <- lwgeom::st_endpoint(road)
-  d  <- as.numeric(sf::st_distance(p1,p2)[1,1])
-  if (d < 2) {
-    warning("Loop roads are not yet supported. Process aborted.", call. = FALSE)
+  # Cut the road is too long or lopp
+  cut <- floor(as.numeric(sf::st_length(road)/param[["extraction"]][["road_max_len"]]))
+  if (cut > 0) { message(sprintf("Long road detected. Splitting the roads in %d chunks of %d m to process.", cut+1, round(sf::st_length(road)/2,0))) }
+  if (cut == 0 && st_is_loop(road)) { message(sprintf("Loop detected. Splitting the roads in 2 chunks of %d m to process.", round(sf::st_length(road)/2,0))) ; cut = 1 }
+
+  if (cut > 0)
+  {
+    cuts  <- seq(0,1, length.out = cut+2)
+    from  <- cuts[-length(cuts)]
+    to    <- cuts[-1]
+    roads <- lapply(seq_along(from), function(i) { lwgeom::st_linesubstring(road, from[i], to[i]) })
+    roads <- do.call(rbind, roads)
+    res   <- measure_roads(ctg, roads, dtm, water, confidence, param)
+    geom  <- st_merge_line(res)
+    new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
+    new_road$DRIVABLEWIDTH <- mean(res$ROADWIDTH)
+    new_road$RIGHTOFWAY    <- mean(res$RIGHTOFWAY)
+    new_road$PABOVE05      <- mean(res$PABOVE05)
+    new_road$PABOVE2       <- mean(res$PABOVE2)
+    new_road$SINUOSITY     <- sinuosity(new_road)
+    new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
+    new_road$CONDUCTIVITY  <- mean(res$CONDUCTIVITY)
+    new_road$SCORE         <- mean(res$SCORE)
+    new_road$STATE         <- get_state(new_road$SCORE)
+    if (new_road$STATE < 3) sf::st_geometry(new_road) <- geom
     return(new_road)
   }
 
@@ -162,10 +180,10 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
 measure_roads = function(ctg, roads, dtm, water = NULL, confidence = 0.7, param = mffproads_default_parameters)
 {
   i <- 1:nrow(roads)
-  res <- lapply(i, function(x)
+  res <- lapply(i, function(j)
   {
-    cat("Road", i, "of", nrow(roads), "\n")
-    measure_road(ctg, roads[x,], dtm, water, confidence, param)
+    cat("Road", j, "of", nrow(roads), "\n")
+    measure_road(ctg, roads[j,], dtm, water, confidence, param)
   })
 
   do.call(rbind, res)

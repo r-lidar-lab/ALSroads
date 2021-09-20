@@ -1,6 +1,7 @@
 # Parameters to extract the point cloud, process it
 # into small sections and computing profiles
 extraction = list(
+  road_max_len = 2000,
   road_buffer = 160,
   section_length = 10,
   profile_resolution = 0.5
@@ -36,7 +37,7 @@ peak = list(
 state = list(
   percentage_veg_thresholds = c(20,70),
   drivable_width_thresholds = c(1,5),
-  score_thresholds = c(0.2, 0.5)
+  score_thresholds = c(0.25, 0.5)
 )
 
 param = list(

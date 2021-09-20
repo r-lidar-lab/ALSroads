@@ -81,7 +81,7 @@ road_state = function(segment_metrics, score, param)
 
   road_exist <- mean(c(road_exist, drivable_exist), na.rm = TRUE)
   pexist <- (2*road_exist + score_exist + embamkement_exist) / 4
-  state <- 5 - as.integer(cut(pexist, breaks = c(-1,20,40,70,101)))
+  state <- get_state(pexist)
 
   cat("Estimating the state of the road...\n")
   cat("   - Estimated probability based on road size:", round(road_exist,1), "\n")
@@ -90,6 +90,11 @@ road_state = function(segment_metrics, score, param)
   cat("   - Estimated probability:", round(pexist,1), "\n")
 
   return(list(state, round(pexist,1)))
+}
+
+get_state =  function(p)
+{
+  5 - as.integer(cut(p, breaks = c(-1,20,40,70,101)))
 }
 
 road_relocate = function(las, road, dtm, water, param)
