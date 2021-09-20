@@ -32,7 +32,7 @@ road_metrics =  function(road, segment_metrics)
     PABOVE05 = avg_percentage_above_05,
     PABOVE2 = avg_percentage_above_2,
     SINUOSITY = S,
-    SCORE = road$SCORE)
+    CONDUCTIVITY = road$CONDUCTIVITY)
 
   if (getOption("MFFProads.debug.metrics")) plot_road_metrics(road, road_metrics, segment_metrics)
 
@@ -49,7 +49,7 @@ road_state = function(segment_metrics, score, param)
   # Estimate the existence of a road in the segment based on percentage of veg points and width
   p <- param[["state"]][["percentage_veg_thresholds"]]
   road_exist <- ifelse(
-    pzabove05 > p[3],
+    pzabove05 > p[2],
     0,
     ifelse (
       pzabove05 >= p[1] & pzabove05 <= p[2],
@@ -77,12 +77,19 @@ road_state = function(segment_metrics, score, param)
       100)
   )
 
-  embamkement_exist = embankement/2
+  embamkement_exist = embankement/2*100
 
-  pexist <- mean(c(road_exist, drivable_exist), na.rm = TRUE)
-  pexist <- (2*pexist + score_exist + embamkement_exist) / 4
+  road_exist <- mean(c(road_exist, drivable_exist), na.rm = TRUE)
+  pexist <- (2*road_exist + score_exist + embamkement_exist) / 4
   state <- 5 - as.integer(cut(pexist, breaks = c(-1,20,40,70,101)))
-  return(state)
+
+  cat("Estimating the state of the road...\n")
+  cat("   - Estimated probability based on road size:", round(road_exist,1), "\n")
+  cat("   - Estimated probability based on conductivity:", round(score_exist,1), "\n")
+  cat("   - Estimated probability based on road shoulder:", round(embamkement_exist,1), "\n")
+  cat("   - Estimated probability:", round(pexist,1), "\n")
+
+  return(list(state, round(pexist,1)))
 }
 
 road_relocate = function(las, road, dtm, water, param)
@@ -117,9 +124,7 @@ road_relocate = function(las, road, dtm, water, param)
   #points(B, col = "red")
 
   # Compute the transition
-  cat("Computing graph map...\n")
-  trans <- gdistance::transition(conductivity, transitionFunction = mean, directions = 8)
-  trans <- gdistance::geoCorrection(trans)
+  trans <- transition(conductivity)
 
   # Find the path
   cat("Computing least cost path...\n")

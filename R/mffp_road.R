@@ -80,7 +80,6 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   param$search$confidence <- confidence
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
-  SCORE <- NA
   new_road <- road
   new_road$ROADWIDTH     <- NA
   new_road$DRIVABLEWIDTH <- NA
@@ -89,6 +88,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   new_road$PABOVE2       <- NA
   new_road$SINUOSITY     <- NA
   new_road$ROADWIDTH     <- NA
+  new_road$CONDUCTIVITY  <- NA
   new_road$SCORE         <- NA
   new_road$STATE         <- 0
 
@@ -122,7 +122,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   if (confidence < 1)
     new_road <- road_relocate(las, road, dtm, water, param)
   else
-    new_road$SCORE <- 1
+    new_road$CONDUCTIVITY <- 1
 
   # We now have an accurate road (hopefully). We can make measurement on it
   param$extraction$road_buffer <- 30
@@ -140,7 +140,9 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
 
   # Aggregate metrics for the whole road from each segment
   metrics <- road_metrics(new_road, segment_metrics)
-  metrics[["STATE"]] <- road_state(segment_metrics, metrics$SCORE, param)
+  res <- road_state(segment_metrics, metrics$CONDUCTIVITY, param)
+  metrics[["SCORE"]] <- res[[2]]
+  metrics[["STATE"]] <- res[[1]]
 
   # Merge the tables of attributes
   original_geometry <- sf::st_geometry(road)
