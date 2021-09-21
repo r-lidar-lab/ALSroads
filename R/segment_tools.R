@@ -261,8 +261,15 @@ find_road_edges = function(profiles, xc, accotement, thsd = 0.1, thz = 0.15)
   right = which(dd$Xr >= xc)
   left = rev(which(dd$Xr <= xc))
 
-  pos1 = screen_profile(right, sdZ, avgZ, thsd, thz)
-  pos2 = screen_profile(left, sdZ, avgZ, thsd, thz)
+  if (length(right) > 0)
+    pos1 = screen_profile(right, sdZ, avgZ, thsd, thz)
+  else
+    pos1 = nrow(dd)
+
+  if (length(right) > 0)
+    pos2 = screen_profile(left, sdZ, avgZ, thsd, thz)
+  else
+    pos2 = 1
 
   xi = dd$Xr[pos2]
   xf = dd$Xr[pos1]

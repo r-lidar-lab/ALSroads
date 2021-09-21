@@ -170,7 +170,7 @@ road_measure = function(las, road, param)
   .segment_metrics <- vector("list", n)
   for (i in ids)
   {
-    if (i%%3 == 0)
+    if (i%%2 == 0)
     {
       cat("Computing road metrics... ", round(i/length(ids)*100,0), "%\r", sep = "")
       utils::flush.console()

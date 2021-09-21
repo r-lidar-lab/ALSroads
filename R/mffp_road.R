@@ -1,11 +1,11 @@
-#' Align and measure a road from Lidar data
+#' Align and measure a road from lidar data
 #'
 #' From a road (line), extracts the line with a buffer from the point cloud and recomputes
 #' the actual positioning of the road and compute some metrics for the road such as its width
 #' or drivable width as well as its state (exists, no longer exists)
 #'
-#' @param road a single line (sf format) used a reference to search and measure road
-#' @param roads multiples lines (sf format) used a reference to search and measure roads
+#' @param road a single line (sf format) used as reference to search and measure road
+#' @param roads multiples lines (sf format) used as reference to search and measure roads
 #' @param ctg a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package
 #' @param dtm RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
 #' with \link[lidR:grid_terrain]{grid_terrain}.
@@ -17,7 +17,7 @@
 #' that the road is 100\% a ground truth. This will skip the relocation step. High values mean that your
 #' are confident that reference road is correct and this will help the algorithm. Low values leave more
 #' freedom to the algorithm but it becomes also more prone to errors. However this parameter is not
-#' very sensitive. Default is 0.6
+#' very sensitive.
 #'
 #' @return a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +
 #' stuff for end user in \code{[["OUTPUT"]]}
@@ -76,6 +76,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   lidR:::assert_is_a_number(confidence)
   lidR:::assert_all_are_in_closed_range(confidence, 0, 1)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
+  if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
 
   param$search$confidence <- confidence
 
@@ -92,14 +93,20 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   new_road$STATE         <- 0
 
   # reorder the columns so outputs are consistent even if exiting early
-  geom <- attr(new_road, "sf_column")
+  ngeom <- attr(new_road, "sf_column")
   names <- names(new_road)
-  names <- names[names != geom]
-  names <- append(names, geom)
+  names <- names[names != ngeom]
+  names <- append(names, ngeom)
   data.table::setcolorder(new_road, names)
 
   # Cut the road is too long or lopp
-  cut <- floor(as.numeric(sf::st_length(road)/param[["extraction"]][["road_max_len"]]))
+  len <- as.numeric(sf::st_length(road))
+  if (len < 50) {
+    warning("Too short road to compute anything.", call. = FALSE)
+    return(new_road)
+  }
+
+  cut <- floor(len/param[["extraction"]][["road_max_len"]])
   if (cut > 0) { message(sprintf("Long road detected. Splitting the roads in %d chunks of %d m to process.", cut+1, round(sf::st_length(road)/2,0))) }
   if (cut == 0 && st_is_loop(road)) { message(sprintf("Loop detected. Splitting the roads in 2 chunks of %d m to process.", round(sf::st_length(road)/2,0))) ; cut = 1 }
 
@@ -138,9 +145,24 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   # If we can't assume that the road is correctly positioned we need to recompute its
   # location accurately
   if (confidence < 1)
-    new_road <- road_relocate(las, road, dtm, water, param)
+  {
+    res <- road_relocate(las, road, dtm, water, param)
+
+    if (res$CONDUCTIVITY == 0)
+    {
+      warning("Impossible to travel to the end of the road. Road does not exist.", call. = FALSE)
+      new_road$STATE <- 4
+      new_road$CONDUCTIVITY <- 0
+      new_road$SCORE <- 0
+      return(new_road)
+    }
+
+    new_road <- res
+  }
   else
+  {
     new_road$CONDUCTIVITY <- 1
+  }
 
   # We now have an accurate road (hopefully). We can make measurement on it
   param$extraction$road_buffer <- 30
@@ -166,10 +188,10 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   original_geometry <- sf::st_geometry(road)
   new_geometry <- sf::st_geometry(new_road)
   attribute_table <- cbind(sf::st_drop_geometry(road), metrics)
-  attribute_table[["geom"]] <- new_geometry
+  attribute_table[[ngeom]] <- new_geometry
 
   if (attribute_table[["STATE"]] > 2)
-    attribute_table[["geom"]] <- original_geometry
+    attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
   return(new_road)

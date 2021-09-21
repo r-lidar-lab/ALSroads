@@ -140,7 +140,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   dt <- system.time({
   tmp <- lidR::filter_poi(nlas, Z > 1, Z < 3)
-  d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)^2)
+  d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
   d12[d12 <= 1] <- 0
   d12[d12 >= 1] <- 1
   d12 <- 1-d12
@@ -178,7 +178,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   cat("   - Global conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_all, col = viridis::inferno(15), "Conductivity")
+    raster::plot(conductivity_all, col = viridis::inferno(15), main = "Conductivity 1m")
 
   s <- raster::stack(slope,
                      rough,
@@ -219,6 +219,9 @@ mask_conductivity <- function(conductivity, road, param)
 
   conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
   conductivity <- raster::mask(conductivity, poly2)
+
+  if (getOption("MFFProads.debug.finding"))
+    raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
   })
   cat("   - Aggregation and masking in ", round(dt[3],2), "s \n", sep = "")
 
@@ -232,6 +235,9 @@ mask_conductivity <- function(conductivity, road, param)
   fmax <- max(f[], na.rm = T)
   target_min <- 1-param$search$confidence
   f <- (1-(((f - fmin) * (1 - target_min)) / (fmax - fmin)))
+
+  if (getOption("MFFProads.debug.finding"))
+    raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
   })
   cat("   - Road rasterization and distance factor map in ", round(dt[3],2), "s \n", sep = "")
 
@@ -246,6 +252,9 @@ mask_conductivity <- function(conductivity, road, param)
     xy <- LAS(xy, LASheader(xy))
     res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(poly3)), 1)
     conductivity[res] <- 1
+
+    if (getOption("MFFProads.debug.finding"))
+      raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
   })
   cat("   - Add full conductivity end blocks in ", round(dt[3],2), "s \n", sep = "")
 
@@ -294,12 +303,23 @@ find_path = function(trans, road, A, B, param)
   sf::st_agr(poly2) <- "constant"
   poly3 <- sf::st_geometry(sf::st_difference(poly2, poly1))
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
-  path <- gdistance::shortestPath(trans, A, B, output = "SpatialLines")
+
   cost <- gdistance::costDistance(trans, A, B)
+
+  if (is.infinite(cost))
+  {
+    cat("    - Impossible to reach the end of the road\n")
+    path <- sf::st_geometry(road)
+    path <- sf::st_as_sf(path)
+    path$CONDUCTIVITY <- 0
+    return(path)
+  }
+
+  path <- gdistance::shortestPath(trans, A, B, output = "SpatialLines") |> suppressWarnings()
   path <- sf::st_as_sf(path)
   len  <- sf::st_length(path)
   path <- sf::st_simplify(path, dTolerance = 3)
-  path <- sf::st_set_crs(path, sf::NA_crs_) |> sf::st_set_crs(sf::st_crs(poly3))
+  path <- sf::st_set_crs(path, sf::NA_crs_) |> sf::st_set_crs(sf::st_crs(road))
   path <- sf::st_difference(path, poly3)
   #path$cost <- cost
   #path$cost_per_unit <- cost/len
