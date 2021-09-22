@@ -143,7 +143,9 @@ adjust_spline = function(points)
 
 st_merge_line = function(x)
 {
-  sf::st_geometry(sf::st_linestring(sf::st_coordinates(sf::st_cast(sf::st_geometry(x), "POINT"))))
+  u <- sf::st_geometry(sf::st_linestring(sf::st_coordinates(sf::st_cast(sf::st_geometry(x), "POINT"))))
+  u <- sf::st_set_crs(u, sf::st_crs(x))
+  return(u)
 }
 
 st_is_loop = function(line)
