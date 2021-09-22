@@ -46,7 +46,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     }
   }
 
-  terrain <- terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
+  terrain <- raster::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
 
   dt <- system.time({
   smin <- 5
