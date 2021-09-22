@@ -77,16 +77,27 @@ road_state = function(segment_metrics, score, param)
       100)
   )
 
+  p <- c(0.5, 1.5) #param[["state"]][["score_thresholds"]]
+  embamkement_exist <- ifelse(
+    score < p[1],
+    0,
+    ifelse(
+      score >= p[1] & score <= p[2],
+      (score-p[1])/(p[2]-p[1])*100,
+      100)
+  )
+
+
   embamkement_exist = embankement/2*100
 
-  road_exist <- mean(c(road_exist, drivable_exist), na.rm = TRUE)
-  pexist <- (2*road_exist + score_exist + embamkement_exist) / 4
+  pexist <- (mean(road_exist) + mean(drivable_exist) + score_exist + embamkement_exist) / 4
   state <- get_state(pexist)
 
   cat("Estimating the state of the road...\n")
-  cat("   - Estimated probability based on road size:", round(road_exist,1), "\n")
+  cat("   - Estimated probability based on vegetation:", round(mean(road_exist),1), "\n")
+  cat("   - Estimated probability based on road size:", round(mean(drivable_exist),1), "\n")
   cat("   - Estimated probability based on conductivity:", round(score_exist,1), "\n")
-  cat("   - Estimated probability based on road shoulder:", round(embamkement_exist,1), "\n")
+  cat("   - Estimated probability based on road shoulders:", round(embamkement_exist,1), "\n")
   cat("   - Estimated probability:", round(pexist,1), "\n")
 
   return(list(state, round(pexist,1)))
@@ -94,7 +105,7 @@ road_state = function(segment_metrics, score, param)
 
 get_state =  function(p)
 {
-  5 - as.integer(cut(p, breaks = c(-1,20,40,70,101)))
+  5 - as.integer(cut(p, breaks = c(-1,25,50,75,101)))
 }
 
 road_relocate = function(las, road, dtm, water, param)
@@ -244,7 +255,7 @@ road_measure = function(las, road, param)
         nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
         lidR::writeLAS(nlas_segment, f)
         message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
-        message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics() called with prev_xc = {cat(prev_xc)}"))
+        message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics()"))
         return(NULL)
       })
 

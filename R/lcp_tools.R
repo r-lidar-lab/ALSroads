@@ -324,6 +324,10 @@ find_path = function(trans, road, A, B, param)
   #path$cost <- cost
   #path$cost_per_unit <- cost/len
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
+
+  if (getOption("MFFProads.debug.finding"))
+    plot(sf::st_geometry(path), col = "red", add = T)
+
   return(path)
 }
 

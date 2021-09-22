@@ -17,13 +17,22 @@ segment_road_metrics = function(nlas_segment, param)
   # in case the map provided is no strictly exact
   Xr <- Y <- NULL
   D <- dd2[Xr >= xc-7 & Xr <= xc + 7]
-  sdZ = ma(D$sdZ, 12)
-  i = which.min(sdZ)
-  y <- D$Xr[i]
-  if (!is.nan(y)) xc = y
+  sdZ  <- ma(D$sdZ, 12)
+  sdZ  <-  sdZ/max(sdZ, na.rm= T)
+  ngnd <- ma(D$ngnd, 12)
+  ngnd <- ngnd/max(ngnd, na.rm = T)
+  ngnd <- 1 - (ngnd - min(ngnd, na.rm = T))
+  cvi  <- ma(D$cvi, 12)
+  cvi  <-  cvi/max(cvi, na.rm = T)
+  all  <- sdZ + 2*ngnd + cvi
+  lm1  <- stats::lm(all~poly(D$Xr,2))
+  coe  <- stats::coefficients(lm1)
+  u    <- -coe[2]/(2*coe[3])
+  if (coe[3] > 0 & u < 5 & u > -5) xc <- u
+
 
   # Normalize but relatively to the road only to get a flat and horizontal road
-  dtm <- lidR::grid_terrain(las_segment, param[["extraction"]][["profile_resolution"]], lidR::knnidw(), fast = TRUE)
+  dtm <- lidR::grid_terrain(las_segment, param[["extraction"]][["profile_resolution"]], lidR::knnidw(), fast = TRUE, Wdegenerated = FALSE)
   road_dtm <- make_road_dtm(dtm, xc)
   road_norm_segment <- lidR::normalize_height(las_segment, road_dtm, na.rm = TRUE)
 
@@ -43,10 +52,11 @@ segment_road_metrics = function(nlas_segment, param)
   # embankment
   left = if (!accotement$left$embankment) rescue_edges[1] else accotement$left$start
   right = if (!accotement$right$embankment) rescue_edges[2] else accotement$right$start
+  if (left > right) stop("Internal error when measuring road size")
   road_edges <- c(left, right)
 
   # Using the road edges and vegetation profile we can estimate the drivable edges
-  drivable_edges <- find_drivable_edges(dd2, road_edges)
+  drivable_edges <- find_drivable_edges(dd2, road_edges, xc)
 
   # Compute different estimation of the width
   accotement_width = round(diff(accotement_edges), 1)
@@ -57,23 +67,26 @@ segment_road_metrics = function(nlas_segment, param)
   # Compute some metrics within the boundaries of the road
   road <- lidR::filter_poi(nlas_segment, Y > road_edges[1], Y < road_edges[2])
   n    <- lidR::npoints(road)
+
   if (n > 0)
   {
-    nabove2       <- sum(road$Z > 2)
-    nabove05      <- sum(road$Z > 0.5)
+    n5            <- sum(road$Z < 5)
+    nabove2       <- sum(road$Z > 2 & road$Z < 5)
+    nabove05      <- sum(road$Z > 0.5 & road$Z < 5)
     nground       <- sum(road$Classification == lidR::LASGROUND)
-    pzabove2      <- round(nabove2 / n * 100, 1)
-    pzabove05     <- round(nabove05 / n * 100, 1)
+    pzabove2      <- round(nabove2 / n5 * 100, 1)
+    pzabove05     <- round(nabove05 / n5 * 100, 1)
     pground       <- round(nground / n * 100, 1)
 
     # Compute some metrics within the boundaries of the drivable road
     road          <- lidR::filter_poi(road, Y > drivable_edges$edges[1], Y < drivable_edges$edges[2])
     n             <- lidR::npoints(road)
-    nabove2       <- sum(road$Z > 2)
-    nabove05      <- sum(road$Z > 0.5)
+    n5            <- sum(road$Z < 5)
+    nabove2       <- sum(road$Z > 2 & road$Z < 5)
+    nabove05      <- sum(road$Z > 0.5 & road$Z < 5)
     nground       <- sum(road$Classification == lidR::LASGROUND)
-    pzabove2_drive  <- round(nabove2 / n * 100, 1)
-    pzabove05_drive <- round(nabove05 / n * 100, 1)
+    pzabove2_drive  <- round(nabove2 / n5 * 100, 1)
+    pzabove05_drive <- round(nabove05 / n5 * 100, 1)
     pground_drive   <- round(nground / n * 100, 1)
   }
   else
@@ -127,32 +140,6 @@ segment_road_metrics = function(nlas_segment, param)
   return(m[-c(1:5)])
 }
 
-screen_profile = function(idx, y1, y2, thsd, thz)
-{
-  if (is.null(y2))
-  {
-    y2 = rep(0, length(y1))
-    thz = 0
-  }
-
-  pos = 0
-  for (i in idx)
-  {
-    if ((is.na(y1[i]) | is.na(y2[i])) & pos == 0) {
-      pos = i
-      next
-    }
-
-    if ((y1[i] > thsd | abs(y2[i]) > thz) & pos == 0)
-      pos = i
-  }
-
-  if (i == data.table::last(idx) & pos == 0)
-    pos = data.table::last(idx)
-
-  return(pos)
-}
-
 compute_gnd_profiles = function(road_norm_pslice, res = 0.25)
 {
   Z <- Y <-Classification <- ReturnNumber <- .N <- Xr <- NULL
@@ -169,12 +156,30 @@ compute_veg_profiles = function(nlas_segment, res = 0.5)
 {
   right <- Classification <- Y <- Z <- Intensity <- .N <- Xr <- NULL
 
-  dd <- nlas_segment@data[, list(ngnd = sum(Classification == 2), nabove2 = sum(Z >= 2),  nabove05 = sum(Z >= 0.5), nabove01 = sum(Z >= 0.1), npoint = .N,  cvi = fsd(Intensity), sdZ = fsd(Z), water = any(Classification == 9L)), by = list(Xr = lidR:::round_any(Y, res))]
+  dd <- nlas_segment@data[, list(ngnd = sum(Classification == 2),
+                                 nabove2 = sum(Z >= 2 & Z < 5),
+                                 nabove05 = sum(Z >= 0.5 & Z < 5),
+                                 nabove01 = sum(Z >= 0.1 & Z < 5),
+                                 npoint = .N,
+                                 npoint2 = sum(Z < 5),
+                                 cvi = diff(range(Intensity)),
+                                 sdZ = fsd(Z)),
+                          by = list(Xr = lidR:::round_any(Y, res))]
+
   data.table::setkey(dd, Xr)
   dd$ngnd[is.na(dd$ngnd)] = 0
-  dd$pabove2 <- ma(dd$nabove2)/dd$npoint
-  dd$pabove05 <- ma(dd$nabove05)/dd$npoint
-  dd$pabove01 <- ma(dd$nabove01)/dd$npoint
+  dd$pabove2 <- dd$nabove2/dd$npoint2
+  dd$pabove2[is.nan(dd$pabove2)] <- 0
+  dd$pabove2 <- ma(dd$pabove2)
+
+  dd$pabove05 <- dd$nabove05/dd$npoint2
+  dd$pabove05[is.nan(dd$pabove05)] <- 0
+  dd$pabove05 <- ma(dd$pabove05)
+
+  dd$pabove01 <- dd$nabove01/dd$npoint2
+  dd$pabove01[is.nan(dd$pabove01)] <- 0
+  dd$pabove01 <- ma(dd$pabove01)
+
   return(dd)
 }
 
@@ -278,18 +283,15 @@ find_road_edges = function(profiles, xc, accotement, thsd = 0.1, thz = 0.15)
   return(edges)
 }
 
-find_drivable_edges = function(profiles, true_edges)
+find_drivable_edges = function(profiles, true_edges, xc)
 {
   Xr <- NULL
   dd2 = profiles
   dd2 = dd2[Xr >= true_edges[1] & Xr <= true_edges[2]]
-  xc = mean(true_edges)
 
-  idx = which(dd2$pabove05 < min(dd2$pabove05)+0.01)
-  if (is.na(idx[1])) idx = which(dd2$pabove2 < min(dd2$pabove2)+0.01)
+  idx = which(dd2$pabove05 < min(dd2$pabove05, na.rm = TRUE)+0.01)
+  if (is.na(idx[1])) idx = which(dd2$pabove2 < min(dd2$pabove2, na.rm = TRUE)+0.01)
   if (is.na(idx[1])) return(list(center = xc, edges = c(xc,xc)))
-
-  xc = round(mean(dd2$Xr[idx]), 2)
 
   right = which(dd2$Xr >= xc)
   left = rev(which(dd2$Xr <= xc))
@@ -311,4 +313,31 @@ find_drivable_edges = function(profiles, true_edges)
 
   return(list(center = xc, edges = edges))
 }
+
+screen_profile = function(idx, y1, y2, thsd, thz)
+{
+  if (is.null(y2))
+  {
+    y2 = rep(0, length(y1))
+    thz = 0
+  }
+
+  pos = 0
+  for (i in idx)
+  {
+    if ((is.na(y1[i]) | is.na(y2[i])) & pos == 0) {
+      pos = i
+      next
+    }
+
+    if ((y1[i] > thsd | abs(y2[i]) > thz) & pos == 0)
+      pos = i
+  }
+
+  if (i == data.table::last(idx) & pos == 0)
+    pos = data.table::last(idx)
+
+  return(pos)
+}
+
 

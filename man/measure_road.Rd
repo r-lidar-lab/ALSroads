@@ -3,7 +3,7 @@
 \name{measure_road}
 \alias{measure_road}
 \alias{measure_roads}
-\title{Align and measure a road from Lidar data}
+\title{Align and measure a road from lidar data}
 \usage{
 measure_road(
   ctg,
@@ -26,7 +26,7 @@ measure_roads(
 \arguments{
 \item{ctg}{a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package}
 
-\item{road}{a single line (sf format) used a reference to search and measure road}
+\item{road}{a single line (sf format) used as reference to search and measure road}
 
 \item{dtm}{RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
 with \link[lidR:grid_terrain]{grid_terrain}.}
@@ -39,11 +39,11 @@ detect bridges.}
 that the road is 100\% a ground truth. This will skip the relocation step. High values mean that your
 are confident that reference road is correct and this will help the algorithm. Low values leave more
 freedom to the algorithm but it becomes also more prone to errors. However this parameter is not
-very sensitive. Default is 0.6}
+very sensitive.}
 
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
 
-\item{roads}{multiples lines (sf format) used a reference to search and measure roads}
+\item{roads}{multiples lines (sf format) used as reference to search and measure roads}
 }
 \value{
 a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +

@@ -8,27 +8,36 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   plot(X, Z, asp = 1, cex = 0.2, col = (road_norm_segment$Classification == 2) + 1, ylim = c(min(c(-7,Z)), max(15, max(Z))))
 
   #lines(dd$Xr,dd$sdZ*10, col = "darkgreen")
-  graphics::lines(dd$Xr, dd$ssdZ*10, col = "red")
-  graphics::lines(dd$Xr, dd$avgZ, col = "blue")
-  graphics::lines(dd2$Xr, dd2$pabove05*2, col = "darkgreen")
+  #graphics::lines(dd$Xr, dd$ssdZ*10, col = "red")
+  #graphics::lines(dd$Xr, dd$avgZ, col = "blue")
+  #graphics::lines(dd2$Xr, dd2$pabove05*2, col = "darkgreen")
 
   graphics::abline(h = 0)
-  graphics::abline(h = c(1,2), lty = 3, col = "gray")
+  #graphics::abline(h = c(1,2), lty = 3, col = "gray")
   graphics::abline(v = m$accotement$left$start, lty = 3, col = "blue")
   graphics::abline(v = m$accotement$right$start, lty = 3, col = "blue")
   graphics::abline(v = m$accotement$left$end, lty = 3, col = "lightskyblue")
   graphics::abline(v = m$accotement$right$end, lty = 3, col = "lightskyblue")
-  graphics::abline(v = m$road_center, lty = 1, col = "black")
   graphics::abline(v = m$drivable_edges, lty = 3, col = "darkgreen")
-  graphics::abline(v = m$rescue_edges, lty = 3, col = "red")
+  graphics::abline(v = m$rescue_edges[1], lty = 3, col = "red")
+  graphics::abline(v = m$rescue_edges[2], lty = 3, col = "red")
+  graphics::abline(v = m$road_edges[1], lty = 2, col = "pink", lwd = 2)
+  graphics::abline(v = m$road_edges[2], lty = 2, col = "pink", lwd = 2)
+  graphics::abline(v = m$xc, lty = 1, col = "purple", lwd = 2)
 
-  graphics::abline(v = m$xc, lty = 3, col = "purple")
+  graphics::legend(x = "topright",
+         legend = c("Shoulders edge", "Rescue edges", "Right of way edges", "Road center", "Drivable edges", "Road edges"),
+         col = c("blue", "red", "lightskyblue", "purple", "darkgreen", "pink"),
+         lty = c(3,3,3,1,3,1),
+         lwd = c(1,1,1,2,1,2))
+
 
   graphics::arrows(m$accotement$left$start, -2, m$accotement$right$start, -2, code = 3, length = 0.1, col = "blue")
   graphics::text(mean(c(m$accotement$left$start, m$accotement$right$start)), -2.5, paste0(m$accotement$right$start-m$accotement$left$start, " m"), col = "blue")
 
   graphics::arrows(m$accotement$left$end, -4, m$accotement$right$end, -4, code = 3, length = 0.1, col = "lightskyblue")
   graphics::text(mean(c(m$accotement$left$end, m$accotement$right$end)), -4.5, paste0(m$accotement$right$end-m$accotement$left$end, " m"), col = "lightskyblue")
+
 
   if (m$drivable_width > 0)
     graphics::arrows(m$drivable_edges[1], 12.5, m$drivable_edges[2], 12.5, code = 3, length = 0.1, col = "darkgreen")
@@ -41,25 +50,33 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   }
 
   if (m$road_width > 0)
-    graphics::arrows(m$road_edges[1], 11, m$road_edges[2], 11, code = 3, length = 0.1, col = "purple")
-  graphics::text(mean(m$road_edges), 11.5, paste0(m$road_width, " m"), col = "purple")
+    graphics::arrows(m$road_edges[1], 11, m$road_edges[2], 11, code = 3, length = 0.1, col = "pink")
+  graphics::text(mean(m$road_edges), 11.5, paste0(m$road_width, " m"), col = "pink")
 
-  x0 = min(X)+5
-  mz = max(Z)
-  graphics::text(x0, mz+2, paste0("> 2 m: ", m$pzabove2, "%"), col = "purple")
-  graphics::text(x0, mz+4, paste0("> 50 cm: ", m$pzabove05, "%"), col = "purple")
+  D <- dd2[Xr >= -7 & Xr <= + 7]
+  sdZ = ma(D$sdZ, 12)
+  sdZ =  sdZ/max(sdZ, na.rm = T)
+  ngnd = ma(D$ngnd, 12)
+  ngnd = ngnd/max(ngnd, na.rm = T)
+  ngnd = 1- (ngnd - min(ngnd, na.rm = T))
+  cvi = ma(D$cvi, 12)
+  cvi =  cvi/max(cvi, na.rm = T)
+  all = sdZ + 2*ngnd + cvi
+  lm1  <- lm(all~poly(D$Xr,2))
+  coe  <- coefficients(lm1)
+  y = predict(lm1, D)
 
-  graphics::text(x0, mz+8, paste0("> 2 m: ", m$pzabove2_drive, "%"), col = "darkgreen")
-  graphics::text(x0, mz+10, paste0("> 50 cm: ", m$pzabove05_drive, "%"), col = "darkgreen")
+  lines(D$Xr, sdZ*5, col = "red")
+  lines(D$Xr, ngnd*5, col = "blue")
+  lines(D$Xr, cvi*5, col = "orange")
+  lines(D$Xr, all/4*5, col = "purple", lwd = 2)
+  lines(D$X, y/4*5)
 
-  cols = c("darkgreen", "orange", "red", "black")
-  col = cols[m$state]
-  graphics::points(x0, min(Z)-3, col = col, pch = 19, cex = 5)
-
-  #lines(dd2$Xr, dd2$pabove2/10, col = "purple")
-  #abline(v = m$drivable_edge, lty = 3, col = "purple")
-  #arrows(m$drivable_edge[1], 14, m$drivable_edge[2], 14, code = 3, length = 0.1)
-  #text(mean(m$drivable_edge), 14.7, paste0(m$drivable_width, " m"))
+  graphics::legend(x = "bottomright",
+                   legend = c("Std. Z", "Ground number", "Intensity range", "All"),
+                   col = c("red", "blue", "orange", "purple"),
+                   lty = 1,
+                   lwd = c(1,1,1,2))
 }
 
 plot_road_metrics = function(chemin, road_metrics, segment_metrics)
