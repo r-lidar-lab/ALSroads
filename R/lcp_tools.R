@@ -249,7 +249,7 @@ mask_conductivity <- function(conductivity, road, param)
     xy <- as.data.frame(xy)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
-    xy <- LAS(xy, LASheader(xy))
+    xy <- lidR::LAS(xy, lidR::LASheader(xy))
     res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(poly3)), 1)
     conductivity[res] <- 1
 
