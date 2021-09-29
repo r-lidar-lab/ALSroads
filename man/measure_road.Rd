@@ -46,8 +46,7 @@ very sensitive.}
 \item{roads}{multiples lines (sf format) used as reference to search and measure roads}
 }
 \value{
-a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +
-stuff for end user in \code{[["OUTPUT"]]}
+An sf object similar to the input with additional attributes and an updated geometry.
 }
 \description{
 From a road (line), extracts the line with a buffer from the point cloud and recomputes

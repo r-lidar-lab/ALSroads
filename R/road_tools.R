@@ -80,7 +80,7 @@ road_score = function(road, param)
       100)
   )
 
-  p <- c(50, 75) #param[["state"]][["shoulder_thresholds"]]
+  p <- param[["state"]][["shoulder_thresholds"]]
   embamkement_exist <- ifelse(
     embankement < p[1],
     0,

@@ -5,7 +5,7 @@
 \alias{mffproads_default_parameters}
 \title{Parameters}
 \format{
-An object of class \code{list} of length 6.
+An object of class \code{list} of length 4.
 }
 \usage{
 mffproads_default_parameters
@@ -17,32 +17,24 @@ Parameters for function \link{measure_road}. Keeping 'as is' is recommended.
 \strong{extraction}: parameters used to extract the point cloud, process it into small sections
 and compute profiles
 \itemize{
+\item \strong{road_max_len}: maximum size of a processed road. If longer than that it will be split in
+chunks of equal sizes such as no one is more than this size.
 \item \strong{road_buffer}: width of the point-cloud extracted around the road
-\item \strong{section_length}: length of sections of road
-\item \strong{profile_resolution}: resolution of the profiles and DTMs
+\item \strong{section_length}: length of sections of road for metrics measurements
+\item \strong{profile_resolution}: resolution of the profiles and DTMs for metrics measurements
 }
 
 \strong{embankments}: parameters to detect embankments in the terrain
 \itemize{
 \item \strong{min_slope}: slope (degrees) greater may initiate or terminate the detection of embankments
-\item \strong{max_width}: the distance between two embankments cannot be greater than that.
-Otherwise it is likely to be only random terrain variations.
 }
 
 \strong{terrain}: parameters to detect road based on the terrain aspect (excluding embankment)
 \itemize{
-\item \strong{max_flat_slope}: a road is flat, max slope (degree) to be considered flat
 \item \strong{max_sd_ground_points}: point belonging on road have a low dispersion on Z.
 maximum standard deviation to be considered as low dispersion
 \item \strong{max_elevation_ground_points}: once normalized relatively to the potential road
 all the points are expected to be at 0. This is the tolerance.
-}
-
-\strong{vegetation}: parameters to detect road in the vegetation gaps
-\itemize{
-\item \strong{max_percentage_point_above_50cm}: maximum allowed ratio of point above 50 cm
-\item \strong{max_percentage_point_above_10cm}: maximum allowed ratio of point above 10 cm
-\item \strong{max_stdz}: maximum allowed standard deviation on Z
 }
 
 \strong{state}: parameters to evaluate the state of a section

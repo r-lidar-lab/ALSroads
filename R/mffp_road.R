@@ -19,8 +19,8 @@
 #' freedom to the algorithm but it becomes also more prone to errors. However this parameter is not
 #' very sensitive.
 #'
-#' @return a list with a several sf objects including stuff for debugging in \code{[["DEBUG"]]} +
-#' stuff for end user in \code{[["OUTPUT"]]}
+#' @return An sf object similar to the input with additional attributes and an updated geometry.
+#'
 #' @export
 #' @examples
 #' library(lidR)

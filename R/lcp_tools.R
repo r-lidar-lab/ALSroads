@@ -5,16 +5,21 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
 
   # Handle bridge case
-  if (!is.null(water))
+  if (!is.null(water) && length(water) > 0)
   {
     id <- NULL
     water <- sf::st_geometry(water)
+    bbox <- suppressMessages(sf::st_bbox(las))
+    bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
+    water <- sf::st_crop(water, bbox)
     if (length(water) > 0)
     {
       inter <- sf::st_intersects(water, road)
       cnt <- sum(sapply(inter, length))
       if (cnt >= 1)
       {
+        cat("Computing correction for detected briges...\n")
+
         Classification <- NULL
         inwater <- Z<- NULL
         las <- lidR::merge_spatial(las, sf::as_Spatial(water))
@@ -40,8 +45,6 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
             contour <- sf::st_set_crs(contour, sf::NA_crs_)
             contour <- sf::st_set_crs(contour, sf::st_crs(water))
             water <- sf::st_difference(water, contour)
-
-            message("There is a brige")
           }
         }
       }
@@ -141,11 +144,14 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
 
   dt <- system.time({
-  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 3)
+  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 5)
   d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
   d12[d12 <= 1] <- 0
   d12[d12 >= 1] <- 1
   d12 <- 1-d12
+
+  if (getOption("MFFProads.debug.finding"))
+    raster::plot(d12, col = viridis::inferno(3), main = "Bottom layer")
   })
   cat("   - Bottom layer conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
