@@ -87,6 +87,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   new_road$RIGHTOFWAY    <- NA
   new_road$PABOVE05      <- NA
   new_road$PABOVE2       <- NA
+  new_road$SHOULDERS     <- NA
   new_road$SINUOSITY     <- NA
   new_road$CONDUCTIVITY  <- NA
   new_road$SCORE         <- NA
@@ -107,7 +108,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   }
 
   cut <- floor(len/param[["extraction"]][["road_max_len"]])
-  if (cut > 0) { message(sprintf("Long road detected. Splitting the roads in %d chunks of %d m to process.", cut+1, round(sf::st_length(road)/2,0))) }
+  if (cut > 0) { message(sprintf("Long road detected. Splitting the roads in %d chunks of %d m to process.", cut+1, round(sf::st_length(road)/(cut+1)))) }
   if (cut == 0 && st_is_loop(road)) { message(sprintf("Loop detected. Splitting the roads in 2 chunks of %d m to process.", round(sf::st_length(road)/2,0))) ; cut = 1 }
 
   if (cut > 0)
@@ -124,10 +125,11 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
     new_road$RIGHTOFWAY    <- mean(res$RIGHTOFWAY)
     new_road$PABOVE05      <- mean(res$PABOVE05)
     new_road$PABOVE2       <- mean(res$PABOVE2)
+    new_road$SHOULDERS     <- mean(res$SHOULDERS)
     new_road$SINUOSITY     <- sinuosity(new_road)
     new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
     new_road$CONDUCTIVITY  <- mean(res$CONDUCTIVITY)
-    new_road$SCORE         <- mean(res$SCORE)
+    new_road$SCORE         <- road_score(new_road, param)
     new_road$STATE         <- get_state(new_road$SCORE)
     if (new_road$STATE < 3) sf::st_geometry(new_road) <- geom
     return(new_road)
@@ -151,9 +153,16 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
     if (res$CONDUCTIVITY == 0)
     {
       warning("Impossible to travel to the end of the road. Road does not exist.", call. = FALSE)
-      new_road$STATE <- 4
-      new_road$CONDUCTIVITY <- 0
-      new_road$SCORE <- 0
+      new_road$ROADWIDTH     <- 0
+      new_road$DRIVABLEWIDTH <- 0
+      new_road$RIGHTOFWAY    <- NA
+      new_road$PABOVE05      <- 100
+      new_road$PABOVE2       <- 100
+      new_road$SHOULDERS     <- 0
+      new_road$SINUOSITY     <- NA
+      new_road$CONDUCTIVITY  <- 0
+      new_road$SCORE         <- 0
+      new_road$STATE         <- 4
       return(new_road)
     }
 
@@ -180,9 +189,8 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
 
   # Aggregate metrics for the whole road from each segment
   metrics <- road_metrics(new_road, segment_metrics)
-  res <- road_state(segment_metrics, metrics$CONDUCTIVITY, param)
-  metrics[["SCORE"]] <- res[[2]]
-  metrics[["STATE"]] <- res[[1]]
+  metrics[["SCORE"]] <- road_score(metrics, param)
+  metrics[["STATE"]] <- get_state(metrics[["SCORE"]])
 
   # Merge the tables of attributes
   original_geometry <- sf::st_geometry(road)

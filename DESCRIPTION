@@ -24,7 +24,7 @@ Imports:
     gdistance,
     EBImage,
     rgdal,
-    fasterize
+    fasterize,
 Suggests:
     mapview,
     viridis
@@ -32,3 +32,5 @@ RoxygenNote: 7.1.2
 LinkingTo: 
     Rcpp,
     lidR
+Depends: 
+    R (>= 4.0.0)

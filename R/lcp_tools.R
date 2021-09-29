@@ -29,7 +29,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
           if (sum(las$Classification == lidR::LASBRIGDE) > 0)
           {
-            bridge <- lidR::grid_metrics(las, ~max(Z), dtm, filter = ~Classification == LASBRIGDE)
+            bridge <- lidR::grid_metrics(las, ~max(Z), dtm, filter = ~Classification == lidR::LASBRIGDE)
             Zbridge <- mean(bridge[], na.rm = TRUE)
             bridge <- raster::buffer(bridge, 10)
             nab = is.na(bridge)
@@ -37,6 +37,8 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
             contour <- raster::rasterToPolygons(bridge, dissolve = T)
             contour <- sf::st_geometry(sf::st_as_sf(contour))
+            contour <- sf::st_set_crs(contour, sf::NA_crs_)
+            contour <- sf::st_set_crs(contour, sf::st_crs(water))
             water <- sf::st_difference(water, contour)
 
             message("There is a brige")

@@ -8,14 +8,15 @@
 road_metrics =  function(road, segment_metrics)
 {
   # Average percentage of point above x
-  avg_percentage_above_05 = round(mean(segment_metrics[["pzabove05"]]), 1)
-  avg_percentage_above_2 = round(mean(segment_metrics[["pzabove2"]]), 1)
+  avg_percentage_above_05 = round(mean(segment_metrics[["pzabove05"]], na.rm = TRUE), 1)
+  avg_percentage_above_2 = round(mean(segment_metrics[["pzabove2"]], na.rm = TRUE), 1)
+  avg_shoulders = round(mean(segment_metrics[["number_accotements"]], na.rm = TRUE)/2*100, 1)
 
   # Average width
-  road_width <- round(mean(segment_metrics[["road_width"]]), 1)
+  road_width <- round(mean(segment_metrics[["road_width"]], na.rm = TRUE), 1)
 
   # Average drivable width.
-  drivable_width <- round(mean(segment_metrics[["drivable_width"]]), 1)
+  drivable_width <- round(mean(segment_metrics[["drivable_width"]], na.rm = TRUE), 1)
 
   # Measure of the right of way not available yet
   right_of_way <- NA_real_
@@ -31,6 +32,7 @@ road_metrics =  function(road, segment_metrics)
     RIGHTOFWAY = right_of_way,
     PABOVE05 = avg_percentage_above_05,
     PABOVE2 = avg_percentage_above_2,
+    SHOULDERS = avg_shoulders,
     SINUOSITY = S,
     CONDUCTIVITY = road$CONDUCTIVITY)
 
@@ -39,11 +41,12 @@ road_metrics =  function(road, segment_metrics)
   return(road_metrics)
 }
 
-road_state = function(segment_metrics, score, param)
+road_score = function(road, param)
 {
-  pzabove05 = segment_metrics$pzabove05
-  drivable_width = segment_metrics$drivable_width
-  embankement = mean(segment_metrics$number_accotements)
+  pzabove05 = road$PABOVE05
+  drivable_width = road$DRIVABLEWIDTH
+  embankement = road$SHOULDERS
+  score = road$CONDUCTIVITY
 
   # The overall state is the median state
   # Estimate the existence of a road in the segment based on percentage of veg points and width
@@ -67,7 +70,7 @@ road_state = function(segment_metrics, score, param)
       100)
   )
 
-  p <- param[["state"]][["score_thresholds"]]
+  p <- param[["state"]][["conductivity_thresholds"]]
   score_exist <- ifelse(
     score < p[1],
     0,
@@ -77,35 +80,31 @@ road_state = function(segment_metrics, score, param)
       100)
   )
 
-  p <- c(0.5, 1.5) #param[["state"]][["score_thresholds"]]
+  p <- c(50, 75) #param[["state"]][["shoulder_thresholds"]]
   embamkement_exist <- ifelse(
-    score < p[1],
+    embankement < p[1],
     0,
     ifelse(
-      score >= p[1] & score <= p[2],
-      (score-p[1])/(p[2]-p[1])*100,
+      embankement >= p[1] & embankement <= p[2],
+      (embankement-p[1])/(p[2]-p[1])*100,
       100)
   )
 
-
-  embamkement_exist = embankement/2*100
-
-  pexist <- (mean(road_exist) + mean(drivable_exist) + score_exist + embamkement_exist) / 4
-  state <- get_state(pexist)
+  pexist <- (road_exist + drivable_exist + score_exist + embamkement_exist) / 4
 
   cat("Estimating the state of the road...\n")
-  cat("   - Estimated probability based on vegetation:", round(mean(road_exist),1), "\n")
-  cat("   - Estimated probability based on road size:", round(mean(drivable_exist),1), "\n")
+  cat("   - Estimated probability based on vegetation:", round(road_exist,1), "\n")
+  cat("   - Estimated probability based on road size:", round(drivable_exist,1), "\n")
   cat("   - Estimated probability based on conductivity:", round(score_exist,1), "\n")
   cat("   - Estimated probability based on road shoulders:", round(embamkement_exist,1), "\n")
   cat("   - Estimated probability:", round(pexist,1), "\n")
 
-  return(list(state, round(pexist,1)))
+  return(round(pexist,1))
 }
 
-get_state =  function(p)
+get_state =  function(score)
 {
-  5 - as.integer(cut(p, breaks = c(-1,25,50,75,101)))
+  5 - as.integer(cut(score, breaks = c(-1,25,50,75,101)))
 }
 
 road_relocate = function(las, road, dtm, water, param)

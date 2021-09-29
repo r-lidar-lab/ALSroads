@@ -13,6 +13,7 @@ clip_longline = function(ctg, line, buffer, chunk = 300)
   u <- sf::st_as_sf(u)
   las <- lidR::clip_roi(ctg, u)
   if (methods::is(las, 'LAS')) return(las)
+  las <- Filter(Negate(lidR::is.empty), las)
   las <- do.call(rbind, las)
   return(las)
 }

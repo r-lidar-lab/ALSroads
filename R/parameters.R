@@ -35,9 +35,9 @@ peak = list(
 
 # Parameters to evaluate the state of a section
 state = list(
-  percentage_veg_thresholds = c(10,30),
+  percentage_veg_thresholds = c(10,40),
   drivable_width_thresholds = c(1,5),
-  score_thresholds = c(0.25, 0.5)
+  conductivity_thresholds = c(0.25, 0.5)
 )
 
 param = list(
