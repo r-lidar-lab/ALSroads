@@ -9,7 +9,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   {
     id <- NULL
     water <- sf::st_geometry(water)
-    bbox <- suppressMessages(sf::st_bbox(las))
+    bbox <- suppressWarnings(sf::st_bbox(las))
     bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
     water <- sf::st_crop(water, bbox)
     if (length(water) > 0)

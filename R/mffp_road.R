@@ -100,6 +100,12 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   names <- append(names, ngeom)
   data.table::setcolorder(new_road, names)
 
+  p1 <- lwgeom::st_startpoint(road)
+  p2 <- lwgeom::st_endpoint(road)
+  d  <- as.numeric(sf::st_distance(p1, p2))
+  if (d < param[["extraction"]][["road_buffer"]]/2 & !st_is_loop(road))
+    param[["extraction"]][["road_buffer"]] = 3/4*d
+
   # Cut the road is too long or lopp
   len <- as.numeric(sf::st_length(road))
   if (len < 50) {
@@ -179,7 +185,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   segment_metrics <- sf::st_as_sf(segment_metrics, coords = c("xroad", "yroad"), crs = sf::st_crs(las))
 
   # We can also improve the coarse measurement given by least cost path
-  if (confidence < 1)
+  if (confidence < 1 && nrow(segment_metrics) > 4L)
   {
     spline <- adjust_spline(segment_metrics)
     spline <- sf::st_simplify(spline, dTolerance = 1)
