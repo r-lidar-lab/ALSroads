@@ -24,6 +24,7 @@ Imports:
     gdistance,
     EBImage,
     rgdal,
+    rgeos,
     fasterize,
 Suggests:
     mapview,
