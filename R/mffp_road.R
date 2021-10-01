@@ -172,6 +172,22 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
       return(new_road)
     }
 
+    if (as.numeric(sf::st_length(res)) < 50)
+    {
+      warning("The new road is too short too compute anything", call. = FALSE)
+      new_road$ROADWIDTH     <- NA
+      new_road$DRIVABLEWIDTH <- NA
+      new_road$RIGHTOFWAY    <- NA
+      new_road$PABOVE05      <- NA
+      new_road$PABOVE2       <- NA
+      new_road$SHOULDERS     <- NA
+      new_road$SINUOSITY     <- NA
+      #new_road$CONDUCTIVITY  <- 0
+      new_road$SCORE         <- 0
+      new_road$STATE         <- 4
+      return(new_road)
+    }
+
     new_road <- res
   }
   else
