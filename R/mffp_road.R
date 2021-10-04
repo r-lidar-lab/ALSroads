@@ -103,8 +103,8 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = 
   p1 <- lwgeom::st_startpoint(road)
   p2 <- lwgeom::st_endpoint(road)
   d  <- as.numeric(sf::st_distance(p1, p2))
-  if (d < param[["extraction"]][["road_buffer"]]/2 & !st_is_loop(road))
-    param[["extraction"]][["road_buffer"]] = 3/4*d
+  if (d < param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
+    param[["extraction"]][["road_buffer"]] = d/(param[["extraction"]][["road_buffer"]]+5)*param[["extraction"]][["road_buffer"]]
 
   # Cut the road is too long or lopp
   len <- as.numeric(sf::st_length(road))
