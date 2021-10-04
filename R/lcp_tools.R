@@ -144,7 +144,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
 
   dt <- system.time({
-  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 5)
+  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 3)
   d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
   d12[d12 <= 1] <- 0
   d12[d12 >= 1] <- 1
