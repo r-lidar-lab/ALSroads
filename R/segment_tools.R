@@ -25,7 +25,7 @@ segment_road_metrics = function(nlas_segment, param)
   cvi  <- ma(D$cvi, 12)
   cvi  <-  cvi/max(cvi, na.rm = T)
   all  <- sdZ + 2*ngnd + cvi
-  lm1  <- stats::lm(all~poly(D$Xr,2))
+  lm1  <- stats::lm(all~ D$Xr + I(D$Xr^2))
   coe  <- stats::coefficients(lm1)
   u    <- -coe[2]/(2*coe[3])
   if (coe[3] > 0 & u < 5 & u > -5) xc <- u

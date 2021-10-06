@@ -62,9 +62,9 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   cvi = ma(D$cvi, 12)
   cvi =  cvi/max(cvi, na.rm = T)
   all = sdZ + 2*ngnd + cvi
-  lm1  <- lm(all~poly(D$Xr,2))
-  coe  <- coefficients(lm1)
-  y = predict(lm1, D)
+  lm1  <- stats::lm(all ~ D$Xr + I(D$Xr^2))
+  coe  <- stats::coefficients(lm1)
+  y = stats::predict(lm1, D)
 
   lines(D$Xr, sdZ*5, col = "red")
   lines(D$Xr, ngnd*5, col = "blue")
