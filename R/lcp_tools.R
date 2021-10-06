@@ -193,18 +193,26 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
                      conductivity_slope,
                      conductivity_rough,
                      conductivity_edge,
+                     chm,
                      conductivity_chm,
+                     d,
                      conductivity_density,
+                     irange,
                      conductivity_intensity,
+                     d12,
                      conductivity_all)
   names(s) <- c("slope",
                 "roughness",
                 "conductivity_slope",
                 "conductivity_roughness",
                 "conductivity_edge",
+                "chm",
                 "conductivity_chm",
+                "density",
                 "conductivity_density",
+                "intensity",
                 "conductivity_intensity",
+                "conductivity_bottom",
                 "conductivity")
 
   if (!is.null(water) && length(water) > 0)
