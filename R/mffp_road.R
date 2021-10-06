@@ -68,7 +68,7 @@
 #' }
 #' @useDynLib MFFProads, .registration = TRUE
 #' @import data.table
-measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.7, param = mffproads_default_parameters)
+measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.1, param = mffproads_default_parameters)
 {
   if (sf::st_geometry_type(road) != "LINESTRING") stop("Expecting LINESTRING geometry for 'road'", call. = FALSE)
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
