@@ -12,43 +12,8 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     bbox <- suppressWarnings(sf::st_bbox(las))
     bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
     water <- sf::st_crop(water, bbox)
-    if (length(water) > 0)
-    {
-      inter <- sf::st_intersects(water, road)
-      cnt <- sum(sapply(inter, length))
-      if (cnt >= 1)
-      {
-        cat("Computing correction for detected briges...\n")
-
-        Classification <- NULL
-        inwater <- Z<- NULL
-        las <- lidR::merge_spatial(las, sf::as_Spatial(water))
-        if (any(!is.na(las$id)))
-        {
-          Zwater <- las$Z[!is.na(las$id)]
-          breaks <- seq(min(Zwater), max(Zwater), 0.5)
-          d <- findInterval(Zwater, breaks)
-          d <- table(d)
-          Zwater <- breaks[which.max(d)]
-          las@data[!is.na(id) & Z > Zwater + 5 & Classification != lidR::LASGROUND, Classification := lidR::LASBRIGDE]
-
-          if (sum(las$Classification == lidR::LASBRIGDE) > 0)
-          {
-            bridge <- lidR::grid_metrics(las, ~max(Z), dtm, filter = ~Classification == lidR::LASBRIGDE)
-            Zbridge <- mean(bridge[], na.rm = TRUE)
-            bridge <- raster::buffer(bridge, 10)
-            nab = is.na(bridge)
-            dtm[!nab] = Zbridge
-
-            contour <- raster::rasterToPolygons(bridge, dissolve = T)
-            contour <- sf::st_geometry(sf::st_as_sf(contour))
-            contour <- sf::st_set_crs(contour, sf::NA_crs_)
-            contour <- sf::st_set_crs(contour, sf::st_crs(water))
-            water <- sf::st_difference(water, contour)
-          }
-        }
-      }
-    }
+    bridge <- sf::st_intersection(sf::st_geometry(road), water)
+    if (length(bridge) > 0) bridge <- sf::st_buffer(bridge, 5)
   }
 
   terrain <- raster::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
@@ -217,6 +182,18 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   if (!is.null(water) && length(water) > 0)
     s <- raster::mask(s, sf::as_Spatial(water), inverse = TRUE)
+
+  if (length(bridge) > 0)
+  {
+    cells =  raster::cellFromPolygon(s$conductivity, sf::as_Spatial(bridge))
+    cells = unlist(cells)
+    tmp = s$conductivity
+    tmp[cells] = 1
+    s$conductivity = tmp
+
+    if (getOption("MFFProads.debug.finding"))
+      raster::plot(s$conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
+  }
 
   return(s)
 }
