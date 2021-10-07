@@ -42,38 +42,6 @@ sinuosity.sfc_LINESTRING <- function(x)
   return(sinuosity.matrix(XY))
 }
 
-cut_line <- function(line, at, metrics)
-{
-  if (is.integer(at))
-  {
-    v <- rle(at)
-    j <- c(1, cumsum(v$length))
-    p <- cumsum(v$lengths/sum(v$lengths))
-  }
-  else
-  {
-    p <- at
-  }
-
-  n <- length(p)
-  p <- c(0, p)
-  o <- vector("list", n)
-  for(i in 1:n)
-  {
-    if (!is.null(metrics))m = metrics[j[i]:j[i+1]]
-    l = lwgeom::st_linesubstring(line, p[i], p[i+1])
-    if (!is.null(metrics))w = 4-m$state
-    l = l[1]
-    if (!is.null(metrics))l$ROADWIDTH = round(sum(w*m$road_width)/sum(w),1)
-    if (!is.null(metrics))l$DRIVABLEWIDTH = round(mean(m$drivable_width),1)
-    if (!is.null(metrics))l$STATE = v$values[i]
-    o[[i]] = l
-  }
-
-  lines = do.call(rbind, o)
-  return(lines)
-}
-
 adjust_spline = function(points)
 {
   # Adjust a spline to create a smooth line from points
