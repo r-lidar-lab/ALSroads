@@ -208,6 +208,10 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.1, param = 
   end$distance_to_start = sf::st_length(res)
   start = sf::st_set_geometry(start, lwgeom::st_startpoint(res))
   end = sf::st_set_geometry(end, lwgeom::st_endpoint(res))
+  start = sf::st_set_crs(start, sf::NA_crs_)
+  end = sf::st_set_crs(end, sf::NA_crs_)
+  start = sf::st_set_crs(start, sf::st_crs(las))
+  end = sf::st_set_crs(end, sf::st_crs(las))
   segment_metrics <- rbind(start, segment_metrics, end)
 
   # We can also improve the coarse measurement given by least cost path

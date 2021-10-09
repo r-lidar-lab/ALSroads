@@ -5,6 +5,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
 
   # Handle bridge case
+  bridge = NULL
   if (!is.null(water) && length(water) > 0)
   {
     id <- NULL
