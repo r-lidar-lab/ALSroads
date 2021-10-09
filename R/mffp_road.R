@@ -1,10 +1,11 @@
 #' Align and measure a road from lidar data
 #'
-#' From a road (line), extracts the line with a buffer from the point cloud and recomputes
-#' the actual positioning of the road and compute some metrics for the road such as its width
-#' or drivable width as well as its state (exists, no longer exists)
+#' From a reference road (line), extracts the line with a buffer from the point cloud and computes
+#' the exact positioning of the road (realignment). Then, using new the accurate  shape, computes
+#' road metrics including its width, its drivable width, sinuosity as well as its state in four
+#' classes (1. operating, 2. maybe operating, 3. maybe decommissioned, 4. decommissioned).
 #'
-#' @param road a single line (sf format) used as reference to search and measure road
+#' @param road a single line (sf format) used as reference to search and measure road.
 #' @param roads multiples lines (sf format) used as reference to search and measure roads
 #' @param ctg a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package
 #' @param dtm RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
@@ -12,12 +13,12 @@
 #' @param param a list of many parameters. See \link{mffproads_default_parameters}.
 #' @param water a set of polygons (sf format) of water bodies. This is used to mask the water bodies
 #' so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows to
-#' detect bridges.
+#' detect bridges above water.
 #' @param confidence numeric. The confidence you have on the location of the reference road. 1 means
-#' that the road is 100\% a ground truth. This will skip the relocation step. High values mean that your
-#' are confident that reference road is correct and this will help the algorithm. Low values leave more
-#' freedom to the algorithm but it becomes also more prone to errors. However this parameter is not
-#' very sensitive.
+#' that the road is 100\% a ground truth. This will skip the relocation step. High values mean high
+#' confidence that the reference road is correct and this will help the algorithm. Low values leave
+#' more freedom to the algorithm but it becomes also more prone to errors. However this parameter is
+#' not very sensitive.
 #'
 #' @return An sf object similar to the input with additional attributes and an updated geometry.
 #'
@@ -40,11 +41,12 @@
 #'
 #' res <- measure_road(ctg, road, dtm)
 #' res
+#' poly <- sf::st_buffer(res, res$ROADWIDTH/2)
 #'
 #' plot(st_geometry(road), col = "red") # Inaccurate road track
 #' plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 #'
-#' mapview::mapview(list(road, res),
+#' mapview::mapview(list(road, poly),
 #'   layer.name = c("Inaccurate", "Corrected"),
 #'   color = c("red", "blue"), map.type = "Esri.WorldImagery")
 #'
