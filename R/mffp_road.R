@@ -20,7 +20,9 @@
 #' more freedom to the algorithm but it becomes also more prone to errors. However this parameter is
 #' not very sensitive.
 #'
-#' @return An sf object similar to the input with additional attributes and an updated geometry.
+#' @return An sf object similar to the input with additional attributes and an updated geometry. If
+#' the state is "likely decommissioned" or "decommissioned" the original geometry is preserved to
+#' prevent adding more error.
 #'
 #' @export
 #' @examples

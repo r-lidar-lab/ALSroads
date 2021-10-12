@@ -46,7 +46,9 @@ not very sensitive.}
 \item{roads}{multiples lines (sf format) used as reference to search and measure roads}
 }
 \value{
-An sf object similar to the input with additional attributes and an updated geometry.
+An sf object similar to the input with additional attributes and an updated geometry. If
+the state is "likely decommissioned" or "decommissioned" the original geometry is preserved to
+prevent adding more error.
 }
 \description{
 From a reference road (line), extracts the line with a buffer from the point cloud and computes
