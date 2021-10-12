@@ -5,14 +5,20 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   X = road_norm_segment$Y
   Z = road_norm_segment$Z
 
-  plot(X, Z, asp = 1, cex = 0.2, col = (road_norm_segment$Classification == 2) + 1, ylim = c(min(c(-7,Z)), max(15, max(Z))))
+  plot(X, Z, asp = 1, cex = 0.3, pch = 19, col = (road_norm_segment$Classification == 2) + 1, ylim = c(min(c(-7,Z)), max(15, max(Z))))
+  graphics::abline(h = 0)
+  graphics::abline(v = 0, lty = 3)
+  graphics::abline(v = m$xc, lty = 1, col = "black", lwd = 2)
 
   #lines(dd$Xr,dd$sdZ*10, col = "darkgreen")
   #graphics::lines(dd$Xr, dd$ssdZ*10, col = "red")
   #graphics::lines(dd$Xr, dd$avgZ, col = "blue")
   #graphics::lines(dd2$Xr, dd2$pabove05*2, col = "darkgreen")
 
-  graphics::abline(h = 0)
+
+
+  if (!isFALSE(getOption("MFFProads.debug.measuring.size")))
+  {
   #graphics::abline(h = c(1,2), lty = 3, col = "gray")
   graphics::abline(v = m$accotement$left$start, lty = 3, col = "blue")
   graphics::abline(v = m$accotement$right$start, lty = 3, col = "blue")
@@ -23,7 +29,7 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   graphics::abline(v = m$rescue_edges[2], lty = 3, col = "red")
   graphics::abline(v = m$road_edges[1], lty = 2, col = "pink", lwd = 2)
   graphics::abline(v = m$road_edges[2], lty = 2, col = "pink", lwd = 2)
-  graphics::abline(v = m$xc, lty = 1, col = "purple", lwd = 2)
+
 
   graphics::legend(x = "topright",
          legend = c("Shoulders edge", "Rescue edges", "Right of way edges", "Road center", "Drivable edges", "Road edges"),
@@ -52,7 +58,10 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   if (m$road_width > 0)
     graphics::arrows(m$road_edges[1], 11, m$road_edges[2], 11, code = 3, length = 0.1, col = "pink")
   graphics::text(mean(m$road_edges), 11.5, paste0(m$road_width, " m"), col = "pink")
+  }
 
+  if (!isFALSE(getOption("MFFProads.debug.measuring.pos")))
+  {
   D <- dd2[Xr >= -7 & Xr <= + 7]
   sdZ = ma(D$sdZ, 12)
   sdZ =  sdZ/max(sdZ, na.rm = T)
@@ -70,13 +79,14 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   lines(D$Xr, ngnd*5, col = "blue")
   lines(D$Xr, cvi*5, col = "orange")
   lines(D$Xr, all/4*5, col = "purple", lwd = 2)
-  lines(D$X, y/4*5)
+  lines(D$X, y/4*5, col = "green", lwd = 3)
 
   graphics::legend(x = "bottomright",
-                   legend = c("Std. Z", "Ground number", "Intensity range", "All"),
-                   col = c("red", "blue", "orange", "purple"),
+                   legend = c("Std. Z", "Ground points", "Intensity", "Average", "ax²+bx+c"),
+                   col = c("red", "blue", "orange", "purple", "green"),
                    lty = 1,
-                   lwd = c(1,1,1,2))
+                   lwd = c(1,1,1,2,3))
+  }
 }
 
 plot_road_metrics = function(chemin, road_metrics, segment_metrics)

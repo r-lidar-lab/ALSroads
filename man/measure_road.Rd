@@ -65,6 +65,11 @@ dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
 ctg  <- readLAScatalog(dir)
 road <- st_read(road, quiet = TRUE)
 dtm  <- raster(dtm)
+crs  <- st_crs(road)
+
+# Voluntarily add more error to the road
+st_geometry(road) <- st_geometry(road) + st_sfc(st_point(c(-8, 0)))
+st_crs(road) <- crs
 
 plot(dtm, col = gray.colors(25, 0, 1))
 plot(ctg, add = TRUE)
@@ -77,9 +82,11 @@ poly <- sf::st_buffer(res, res$ROADWIDTH/2)
 plot(st_geometry(road), col = "red") # Inaccurate road track
 plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 
-mapview::mapview(list(road, poly),
+url = "https://servicesmatriciels.mern.gouv.qc.ca:443/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+m = mapview::mapview(list(road, poly),
   layer.name = c("Inaccurate", "Corrected"),
   color = c("red", "blue"), map.type = "Esri.WorldImagery")
+leaflet::addTiles(m@map, url)
 
 \dontrun{
 # DEBUG
