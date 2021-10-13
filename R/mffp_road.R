@@ -254,7 +254,7 @@ measure_road = function(ctg, road, dtm, water = NULL, confidence = 0.1, param = 
 
 #' @export
 #' @rdname measure_road
-measure_roads = function(ctg, roads, dtm, water = NULL, confidence = 0.7, param = mffproads_default_parameters)
+measure_roads = function(ctg, roads, dtm, water = NULL, confidence = 0.1, param = mffproads_default_parameters)
 {
   i <- 1:nrow(roads)
   res <- lapply(i, function(j)

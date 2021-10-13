@@ -19,7 +19,7 @@ measure_roads(
   roads,
   dtm,
   water = NULL,
-  confidence = 0.7,
+  confidence = 0.1,
   param = mffproads_default_parameters
 )
 }
