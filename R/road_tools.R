@@ -178,9 +178,10 @@ road_measure = function(las, road, param)
   n <- nrow(CC)
   ids <- 1:(n-1)
   .segment_metrics <- vector("list", n)
+  print_at = round(seq(1, 526, length.out = 10)) # prints every ~10%
   for (i in ids)
   {
-    if (i%%2 == 0)
+    if (i %in% print_at)
     {
       verbose("Computing road metrics... ", round(i/length(ids)*100,0), "%\r", sep = "")
       utils::flush.console()

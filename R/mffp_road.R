@@ -84,6 +84,11 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAscatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
   if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
+  if(getOption("MFFProads.debug.progress"))
+  {
+    cat("          |.............|.............|\n")
+    cat("Progress: ")
+  }
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
   new_road <- road
@@ -243,6 +248,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
+  verbose("Done\n")
   return(new_road)
 }
 

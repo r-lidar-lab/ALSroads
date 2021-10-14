@@ -6,6 +6,7 @@
     MFFProads.debug.measuring = FALSE,
     MFFProads.debug.metrics = FALSE,
     MFFProads.debug.verbose = FALSE,
+    MFFProads.debug.progress = TRUE,
     MFFProads.debug = FALSE)
 
   toset <- !(names(op.MFFProads) %in% names(op))
@@ -21,5 +22,12 @@
 
 verbose = function(...)
 {
+  if (getOption("MFFProads.debug.verbose") & getOption("MFFProads.debug.progress"))
+  {
+    message("verbose and progress cannot be both TRUE. progress set to FALSE")
+    options(MFFProads.debug.progress = FALSE)
+  }
+
   if (getOption("MFFProads.debug.verbose")) cat(...)
+  if (getOption("MFFProads.debug.progress")) cat(".")
 }
