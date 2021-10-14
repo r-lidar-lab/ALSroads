@@ -84,11 +84,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAscatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
   if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
-  if(getOption("MFFProads.debug.progress"))
-  {
-    cat("          |.............|.............|\n")
-    cat("Progress: ")
-  }
+  if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
   new_road <- road
@@ -134,7 +130,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     to    <- cuts[-1]
     roads <- lapply(seq_along(from), function(i) { lwgeom::st_linesubstring(road, from[i], to[i]) })
     roads <- do.call(rbind, roads)
-    res   <- measure_roads(ctg, roads, dtm, water, confidence, param)
+    res   <- measure_roads(ctg, roads, dtm, water, param)
     geom  <- st_merge_line(res)
     new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
     new_road$DRIVABLEWIDTH <- mean(res$ROADWIDTH)
@@ -210,19 +206,13 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   segment_metrics <- road_measure(las, new_road, param)
   segment_metrics <- sf::st_as_sf(segment_metrics, coords = c("xroad", "yroad"), crs = sf::st_crs(las))
 
-  # Insert back start and end points
-
-  start <- segment_metrics[1,]
-  start$distance_to_start = 0
+  # Insert back send points
   end <- segment_metrics[nrow(segment_metrics),]
   end$distance_to_start = sf::st_length(res)
-  start = sf::st_set_geometry(start, lwgeom::st_startpoint(res))
   end = sf::st_set_geometry(end, lwgeom::st_endpoint(res))
-  start = sf::st_set_crs(start, sf::NA_crs_)
   end = sf::st_set_crs(end, sf::NA_crs_)
-  start = sf::st_set_crs(start, sf::st_crs(las))
   end = sf::st_set_crs(end, sf::st_crs(las))
-  segment_metrics <- rbind(start, segment_metrics, end)
+  segment_metrics <- rbind(segment_metrics, end)
 
   # We can also improve the coarse measurement given by least cost path
   if (param[["constraint"]][["confidence"]] < 1 && nrow(segment_metrics) > 4L)
@@ -248,7 +238,10 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
+
   verbose("Done\n")
+  cat("\n")
+
   return(new_road)
 }
 

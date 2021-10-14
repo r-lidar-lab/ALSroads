@@ -159,7 +159,10 @@ road_measure = function(las, road, param)
 
   # Split the path in n sections of ~ same length
   path_lenght <- as.numeric(sf::st_length(road))
-  points <- sf::st_sample(road, round(path_lenght/param[["extraction"]][["section_length"]]), type =  "regular")
+  each <- param[["extraction"]][["section_length"]]/path_lenght
+  at <- round(seq(0,1, each),4)
+  at[length(at)] = 1
+  points <- sf::st_line_sample(road, sample = at)
   points <- sf::st_cast(points, "POINT")
   points <- sf::st_as_sf(points)
 
@@ -214,10 +217,13 @@ road_measure = function(las, road, param)
     },
     error = function(e)
     {
-      f <- tempfile(fileext = ".las")
-      lidR::writeLAS(las_segment, f)
-      message(glue::glue("Normalization impossible in segment {i}. Segment skiped with error : {e} "))
-      message(glue::glue("The LAS objects that caused the failure has been saved in {f}."))
+      if (isTRUE(getOption("MFFProads.debug")))
+      {
+        f <- tempfile(fileext = ".las")
+        lidR::writeLAS(las_segment, f)
+        message(glue::glue("Normalization impossible in segment {i}. Segment skiped with error : {e} "))
+        message(glue::glue("The LAS objects that caused the failure has been saved in {f}."))
+      }
       return(NULL)
     })
 
@@ -251,11 +257,14 @@ road_measure = function(las, road, param)
     m <- tryCatch({ segment_road_metrics(nlas_segment, param)},
       error = function(e)
       {
-        f <- tempfile(fileext = ".las")
-        nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
-        lidR::writeLAS(nlas_segment, f)
-        message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
-        message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics()"))
+        if (isTRUE(getOption("MFFProads.debug")))
+        {
+          f <- tempfile(fileext = ".las")
+          nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
+          lidR::writeLAS(nlas_segment, f)
+          message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
+          message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics()"))
+        }
         return(NULL)
       })
 
