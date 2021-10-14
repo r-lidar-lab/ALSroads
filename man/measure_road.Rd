@@ -54,7 +54,9 @@ prevent adding more error.
 From a reference road (line), extracts the line with a buffer from the point cloud and computes
 the exact positioning of the road (realignment). Then, using new the accurate  shape, computes
 road metrics including its width, its drivable width, sinuosity as well as its state in four
-classes (1. operating, 2. maybe operating, 3. maybe decommissioned, 4. decommissioned).
+classes (1. operating, 2. maybe operating, 3. maybe decommissioned, 4. decommissioned). The
+function \link{st_snap_lines} allows to post-process the output to fix minor inaccuracies and
+reconnect the roads than may no longer be connected because each road is processed independently.
 }
 \examples{
 library(lidR)

@@ -3,5 +3,6 @@
 export(measure_road)
 export(measure_roads)
 export(mffproads_default_parameters)
+export(st_snap_lines)
 import(data.table)
 useDynLib(MFFProads, .registration = TRUE)
