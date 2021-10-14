@@ -5,7 +5,7 @@
 \alias{mffproads_default_parameters}
 \title{Parameters}
 \format{
-An object of class \code{list} of length 4.
+An object of class \code{list} of length 5.
 }
 \usage{
 mffproads_default_parameters
@@ -22,6 +22,15 @@ chunks of equal sizes such as no one is more than this size.
 \item \strong{road_buffer}: width of the point-cloud extracted around the road
 \item \strong{section_length}: length of sections of road for metrics measurements
 \item \strong{profile_resolution}: resolution of the profiles and DTMs for metrics measurements
+}
+
+\strong{constraint}: parameters to contraint the road relocation step
+\itemize{
+\item \strong{confidence} The confidence you have on the location of the reference roads. 1 means
+that the road is 100\\% a ground truth. This will skip the relocation step. High values mean high
+confidence that the reference road is correct and this will help the algorithm. Low values leave
+more freedom to the algorithm but it becomes also more prone to errors. However this parameter is
+not very sensitive.
 }
 
 \strong{embankments}: parameters to detect embankments in the terrain

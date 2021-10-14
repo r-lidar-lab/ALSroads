@@ -10,7 +10,6 @@ measure_road(
   road,
   dtm,
   water = NULL,
-  confidence = 0.1,
   param = mffproads_default_parameters
 )
 
@@ -19,7 +18,6 @@ measure_roads(
   roads,
   dtm,
   water = NULL,
-  confidence = 0.1,
   param = mffproads_default_parameters
 )
 }
@@ -34,12 +32,6 @@ with \link[lidR:grid_terrain]{grid_terrain}.}
 \item{water}{a set of polygons (sf format) of water bodies. This is used to mask the water bodies
 so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows to
 detect bridges above water.}
-
-\item{confidence}{numeric. The confidence you have on the location of the reference road. 1 means
-that the road is 100\% a ground truth. This will skip the relocation step. High values mean high
-confidence that the reference road is correct and this will help the algorithm. Low values leave
-more freedom to the algorithm but it becomes also more prone to errors. However this parameter is
-not very sensitive.}
 
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
 
