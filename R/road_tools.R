@@ -104,7 +104,7 @@ road_score = function(road, param)
 
 get_state =  function(score)
 {
-  5 - as.integer(cut(score, breaks = c(-1,25,50,75,101)))
+  5 - as.integer(cut(score, breaks = c(-1,25,50,75,101), right = FALSE))
 }
 
 road_relocate = function(las, road, dtm, water, param)

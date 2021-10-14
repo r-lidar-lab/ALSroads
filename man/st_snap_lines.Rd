@@ -4,7 +4,7 @@
 \alias{st_snap_lines}
 \title{Snap road endings}
 \usage{
-st_snap_lines(roads, tolerance = 5)
+st_snap_lines(roads, tolerance = 8)
 }
 \arguments{
 \item{roads}{multiples lines (sf format)}

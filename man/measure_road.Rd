@@ -10,7 +10,8 @@ measure_road(
   road,
   dtm,
   water = NULL,
-  param = mffproads_default_parameters
+  param = mffproads_default_parameters,
+  ...
 )
 
 measure_roads(
@@ -34,6 +35,8 @@ so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. I
 detect bridges above water.}
 
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
+
+\item{...}{unused}
 
 \item{roads}{multiples lines (sf format) used as reference to search and measure roads}
 }

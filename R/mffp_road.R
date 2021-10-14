@@ -16,6 +16,7 @@
 #' @param water a set of polygons (sf format) of water bodies. This is used to mask the water bodies
 #' so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows to
 #' detect bridges above water.
+#' @param ... unused
 
 #' @return An sf object similar to the input with additional attributes and an updated geometry. If
 #' the state is "likely decommissioned" or "decommissioned" the original geometry is preserved to
@@ -76,14 +77,15 @@
 #' }
 #' @useDynLib MFFProads, .registration = TRUE
 #' @import data.table
-measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_parameters)
+measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_parameters, ...)
 {
+  dots <- list(...)
   lidR::opt_progress(ctg) <- FALSE
   if (sf::st_geometry_type(road) != "LINESTRING") stop("Expecting LINESTRING geometry for 'road'", call. = FALSE)
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAscatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
-  if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
+  if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
@@ -114,8 +116,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 
   # Cut the road is too long or lopp
   len <- as.numeric(sf::st_length(road))
-  if (len < 50) {
+  if (len < 40) {
     warning("Too short road to compute anything.", call. = FALSE)
+    verbose("Done\n") ; cat("\n")
     return(new_road)
   }
 
@@ -144,6 +147,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     new_road$SCORE         <- road_score(new_road, param)
     new_road$STATE         <- get_state(new_road$SCORE)
     if (new_road$STATE < 3) sf::st_geometry(new_road) <- geom
+    verbose("Done\n") ; cat("\n")
     return(new_road)
   }
 
@@ -153,6 +157,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   # Exit early. This should never happen
   if (lidR::is.empty(las)) {
     warning("No point found.", call. = FALSE)
+    verbose("Done\n") ; cat("\n")
     return(new_road)
   }
 
@@ -175,6 +180,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       new_road$CONDUCTIVITY  <- 0
       new_road$SCORE         <- 0
       new_road$STATE         <- 4
+      verbose("Done\n") ; cat("\n")
       return(new_road)
     }
 
@@ -191,6 +197,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       #new_road$CONDUCTIVITY  <- 0
       new_road$SCORE         <- 0
       new_road$STATE         <- 4
+      verbose("Done\n") ; cat("\n")
       return(new_road)
     }
 
@@ -239,8 +246,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 
   new_road <- sf::st_as_sf(attribute_table)
 
-  verbose("Done\n")
-  cat("\n")
+  verbose("Done\n") ; cat("\n")
 
   return(new_road)
 }
@@ -249,11 +255,13 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 #' @rdname measure_road
 measure_roads = function(ctg, roads, dtm, water = NULL, param = mffproads_default_parameters)
 {
+  if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
+
   i <- 1:nrow(roads)
   res <- lapply(i, function(j)
   {
-    cat("Road", j, "of", nrow(roads), "\n")
-    measure_road(ctg, roads[j,], dtm, water, param)
+    if (getOption("MFFProads.debug.verbose") | getOption("MFFProads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
+    measure_road(ctg, roads[j,], dtm, water, param, Windex = FALSE)
   })
 
   do.call(rbind, res)

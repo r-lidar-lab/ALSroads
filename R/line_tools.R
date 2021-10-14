@@ -8,13 +8,13 @@
 #'
 #' @return The same object provided in input but with corrected ending such as roads are connected.
 #' @export
-st_snap_lines = function(roads, tolerance = 5)
+st_snap_lines = function(roads, tolerance = 8)
 {
   end   <- lwgeom::st_endpoint(roads)
   start <- lwgeom::st_startpoint(roads)
   ends  <- c(start, end)
 
-  u <- sf::st_is_within_distance(ends, ends, 5)
+  u <- sf::st_is_within_distance(ends, ends, tolerance)
   u <- lapply(u, sort)
   u <- Filter(function(x) { length(x) > 1}, u)
   u <- unique(u)
