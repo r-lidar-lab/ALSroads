@@ -23,7 +23,7 @@ extract_road = function(las, road, param)
   # Automatically extract the points of the road if the input is a LAScatalog
   if (methods::is(las, "LAScatalog"))
   {
-    cat("Extracting the point cloud...\n")
+    verbose("Extracting the point cloud...\n")
     width <- param[["extraction"]][["road_buffer"]]
     las <- clip_longline(las, road, (width + 5)/2)
   }
@@ -33,7 +33,7 @@ extract_road = function(las, road, param)
   {
     if (is.null(las@index[["quadtree"]]))
     {
-      cat("Creating a spatial index...\n")
+      verbose("Creating a spatial index...\n")
       las@index[["quadtree"]] <- quadtree(las)
     }
   }

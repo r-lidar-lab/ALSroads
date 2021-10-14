@@ -7,6 +7,8 @@ extraction = list(
   profile_resolution = 0.5
 )
 
+constraint = list(confidence = 0.1)
+
 # Parameters to detect embankments in the terrain
 embankments = list(
   min_slope = 10
@@ -29,6 +31,7 @@ state = list(
 
 param = list(
   extraction = extraction,
+  constraint = constraint,
   embankments = embankments,
   terrain = terrain,
   state = state
@@ -46,6 +49,14 @@ param = list(
 #' - **road_buffer**: width of the point-cloud extracted around the road
 #' - **section_length**: length of sections of road for metrics measurements
 #' - **profile_resolution**: resolution of the profiles and DTMs for metrics measurements
+#'
+#' **constraint**: parameters to contraint the road relocation step
+#'  - **confidence** The confidence you have on the location of the reference roads. 1 means
+#' that the road is 100\% a ground truth. This will skip the relocation step. High values mean high
+#' confidence that the reference road is correct and this will help the algorithm. Low values leave
+#' more freedom to the algorithm but it becomes also more prone to errors. However this parameter is
+#' not very sensitive.
+#'
 #'
 #' **embankments**: parameters to detect embankments in the terrain
 #'

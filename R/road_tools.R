@@ -92,12 +92,12 @@ road_score = function(road, param)
 
   pexist <- (road_exist + drivable_exist + score_exist + embamkement_exist) / 4
 
-  cat("Estimating the state of the road...\n")
-  cat("   - Estimated probability based on vegetation:", round(road_exist,1), "\n")
-  cat("   - Estimated probability based on road size:", round(drivable_exist,1), "\n")
-  cat("   - Estimated probability based on conductivity:", round(score_exist,1), "\n")
-  cat("   - Estimated probability based on road shoulders:", round(embamkement_exist,1), "\n")
-  cat("   - Estimated probability:", round(pexist,1), "\n")
+  verbose("Estimating the state of the road...\n")
+  verbose("   - Estimated probability based on vegetation:", round(road_exist,1), "\n")
+  verbose("   - Estimated probability based on road size:", round(drivable_exist,1), "\n")
+  verbose("   - Estimated probability based on conductivity:", round(score_exist,1), "\n")
+  verbose("   - Estimated probability based on road shoulders:", round(embamkement_exist,1), "\n")
+  verbose("   - Estimated probability:", round(pexist,1), "\n")
 
   return(round(pexist,1))
 }
@@ -142,7 +142,7 @@ road_relocate = function(las, road, dtm, water, param)
   trans <- transition(conductivity)
 
   # Find the path
-  cat("Computing least cost path...\n")
+  verbose("Computing least cost path...\n")
   path <- find_path(trans, road, A, B, param)
 
   return(path)
@@ -182,7 +182,7 @@ road_measure = function(las, road, param)
   {
     if (i%%2 == 0)
     {
-      cat("Computing road metrics... ", round(i/length(ids)*100,0), "%\r", sep = "")
+      verbose("Computing road metrics... ", round(i/length(ids)*100,0), "%\r", sep = "")
       utils::flush.console()
     }
 
@@ -266,7 +266,7 @@ road_measure = function(las, road, param)
     .segment_metrics[[i]] <- m
   }
 
-  cat("Computing road metrics... 100%\n")
+  verbose("Computing road metrics... 100%\n")
 
   return(data.table::rbindlist(.segment_metrics))
 }

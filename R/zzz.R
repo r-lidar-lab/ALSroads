@@ -5,6 +5,7 @@
     MFFProads.debug.finding = FALSE,
     MFFProads.debug.measuring = FALSE,
     MFFProads.debug.metrics = FALSE,
+    MFFProads.debug.verbose = FALSE,
     MFFProads.debug = FALSE)
 
   toset <- !(names(op.MFFProads) %in% names(op))
@@ -17,3 +18,8 @@
 }
 
 .datatable.aware = TRUE
+
+verbose = function(...)
+{
+  if (getOption("MFFProads.debug.verbose")) cat(...)
+}

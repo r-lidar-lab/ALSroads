@@ -1,6 +1,6 @@
 grid_conductivity <- function(las, road, dtm, water = NULL)
 {
-  cat("Computing conductivity maps...\n")
+  verbose("Computing conductivity maps...\n")
 
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
 
@@ -33,7 +33,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_slope, col = viridis::viridis(25), main = "Conductivity slope")
   })
-  cat("   - Slope conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Slope conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
 
   dt <- system.time({
@@ -47,7 +47,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     raster::plot(conductivity_rough, col = viridis::viridis(3), main = "Conductivity roughness")
 
   })
-  cat("   - Roughness conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Roughness conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
   edge <- slope
@@ -64,7 +64,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_edge, col = viridis::viridis(3), main = "Conductivity Sobel edges")
   })
-  cat("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
   q <- stats::quantile(las$Intensity, probs = 0.98)
@@ -92,7 +92,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_intensity, col = viridis::viridis(3), main = "Conductivity intensity")
   })
-  cat("   - Intensity conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Intensity conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
@@ -106,7 +106,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_chm, col = viridis::inferno(3), main = "Conductivity CHM")
   })
-  cat("   - CHM conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - CHM conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
 
   dt <- system.time({
@@ -119,7 +119,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(d12, col = viridis::inferno(3), main = "Bottom layer")
   })
-  cat("   - Bottom layer conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Bottom layer conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
 
   dt <- system.time({
@@ -141,7 +141,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_density, col = viridis::inferno(3), main = "Conductivity density")
   })
-  cat("   - Density conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Density conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
 
   dt <- system.time({
@@ -149,7 +149,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   conductivity_all <- conductivity_slope * d12 * conductivity_edge * (2 * conductivity_density + conductivity_chm + conductivity_rough + conductivity_intensity)
   conductivity_all <- conductivity_all/max_coductivity
   })
-  cat("   - Global conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Global conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity_all, col = viridis::inferno(15), main = "Conductivity 1m")
@@ -201,7 +201,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
 mask_conductivity <- function(conductivity, road, param)
 {
-  cat("Computing conductivity masks...\n")
+  verbose("Computing conductivity masks...\n")
 
   dt <- system.time({
   poly1 <- sf::st_buffer(road, param$extraction$road_buffer/2, endCapStyle = "FLAT")
@@ -217,7 +217,7 @@ mask_conductivity <- function(conductivity, road, param)
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
   })
-  cat("   - Aggregation and masking in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Aggregation and masking in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
   # Confidence factor
@@ -227,13 +227,13 @@ mask_conductivity <- function(conductivity, road, param)
   f <- raster::mask(f, poly2)
   fmin <- min(f[], na.rm = T)
   fmax <- max(f[], na.rm = T)
-  target_min <- 1-param$search$confidence
+  target_min <- 1-param[["constraint"]][["confidence"]]
   f <- (1-(((f - fmin) * (1 - target_min)) / (fmax - fmin)))
 
   if (getOption("MFFProads.debug.finding"))
     raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
   })
-  cat("   - Road rasterization and distance factor map in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Road rasterization and distance factor map in ", round(dt[3],2), "s \n", sep = "")
 
 
   dt <- system.time({
@@ -250,7 +250,7 @@ mask_conductivity <- function(conductivity, road, param)
     if (getOption("MFFProads.debug.finding"))
       raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
   })
-  cat("   - Add full conductivity end blocks in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Add full conductivity end blocks in ", round(dt[3],2), "s \n", sep = "")
 
 
   return(conductivity)
@@ -274,17 +274,17 @@ start_end_points = function(road, param)
 
 transition <- function(conductivity)
 {
-  cat("Computing graph map...\n")
+  verbose("Computing graph map...\n")
 
   dt <- system.time({
   trans <- gdistance::transition(conductivity, transitionFunction = mean, directions = 8)
   })
-  cat("   - Transition graph in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Transition graph in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
   trans <- gdistance::geoCorrection(trans)
   })
-  cat("   - Geocorrection graph in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Geocorrection graph in ", round(dt[3],2), "s \n", sep = "")
 
   return(trans)
 }
@@ -302,7 +302,7 @@ find_path = function(trans, road, A, B, param)
 
   if (is.infinite(cost))
   {
-    cat("    - Impossible to reach the end of the road\n")
+    verbose("    - Impossible to reach the end of the road\n")
     path <- sf::st_geometry(road)
     path <- sf::st_as_sf(path)
     path$CONDUCTIVITY <- 0
