@@ -1,6 +1,6 @@
 # MFFProads
 
-MFFProads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs of Québec (MFFP)](https://mffp.gouv.qc.ca/)
+MFFProads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs du Québec (MFFP)](https://mffp.gouv.qc.ca/)
 
 ## Installation
 
@@ -10,13 +10,15 @@ remotes::install_github("Jean-Romain/MFFProads")
 
 ## Example
 
-In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither the state of th road (operating/decommissioned) nor its width. The algorithm recomputes the accurate location of the road for a lidar point cloud and estimates its width and its state (in blue). Here we have an operating road with a drivable width of 8 meters.
+In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its state (operating/decommissioned) nor its width. The algorithm recomputes the accurate location of the road for a lidar point cloud and estimates its width and its state (in blue). Here we have an operating road with a drivable width of 8 meters.
 
 ```r
 library(MFFProads)
 library(lidR)
 library(sf)
 library(raster)
+library(mapview)
+library(leaflet)
 
 # Load data (LAS tiles, DTM, map)
 dir  <- system.file("extdata", "", package="MFFProads")
@@ -25,6 +27,7 @@ dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
 ctg  <- readLAScatalog(dir)
 road <- st_read(road, quiet = TRUE)
 dtm  <- raster(dtm)
+crs(dtm) <- crs(road)
 
 # Relocate the road at the correct location
 # Measure the width and estimate its state (operating/decommisionned)
