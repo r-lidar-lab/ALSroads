@@ -101,14 +101,6 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   new_road$SCORE         <- NA
   new_road$STATE         <- 0
 
-
-  bbroad <- sf::st_as_sfc(sf::st_bbox(sf::st_buffer(road, param[["extraction"]][["road_buffer"]]/2)))
-  bbdtm <- sf::st_as_sfc(sf::st_bbox(dtm))
-  sf::st_crs(bbdtm) <- sf::NA_crs_
-  sf::st_crs(bbdtm) <- sf::st_crs(bbroad)
-  u <- unlist(sf::st_contains(bbdtm, bbroad))
-  if (length(u) == 0) stop("The DTM does not fully encompass the buffered road", call. = FALSE)
-
   # reorder the columns so outputs are consistent even if exiting early
   ngeom <- attr(new_road, "sf_column")
   names <- names(new_road)
