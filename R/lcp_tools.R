@@ -213,16 +213,14 @@ mask_conductivity <- function(conductivity, road, param)
 {
   verbose("Computing conductivity masks...\n")
 
-  dt <- system.time({
   poly1 <- sf::st_buffer(road, param$extraction$road_buffer/2, endCapStyle = "FLAT")
-  poly2 <- sf::st_buffer(road, param$extraction$road_buffer/2)
-  sf::st_agr(poly1) <- "constant"
-  sf::st_agr(poly2) <- "constant"
-  poly3 <- sf::st_difference(poly2, poly1)
+  hull  <- sf::st_buffer(road, param$extraction$road_buffer/2)
+  caps  <- make_caps(road, param)
   poly4 <- sf::st_buffer(road, 1)
 
+  dt <- system.time({
   conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
-  conductivity <- raster::mask(conductivity, poly2)
+  conductivity <- raster::mask(conductivity, hull)
 
   if (getOption("MFFProads.debug.finding"))
     raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
@@ -234,7 +232,7 @@ mask_conductivity <- function(conductivity, road, param)
   f <- fasterize::fasterize(poly4, conductivity)
   f <- raster::distance(f)
 
-  f <- raster::mask(f, poly2)
+  f <- raster::mask(f, hull)
   fmin <- min(f[], na.rm = T)
   fmax <- max(f[], na.rm = T)
   target_min <- 1-param[["constraint"]][["confidence"]]
@@ -254,8 +252,8 @@ mask_conductivity <- function(conductivity, road, param)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
     xy <- lidR::LAS(xy, lidR::LASheader(xy))
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(poly3)), 1)
-    conductivity[res] <- 1
+    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps)), 1)
+    conductivity[res] <- mean(conductivity[], na.rm = T)
 
     if (getOption("MFFProads.debug.finding"))
       raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
@@ -301,11 +299,7 @@ transition <- function(conductivity)
 
 find_path = function(trans, road, A, B, param)
 {
-  poly1 <- sf::st_buffer(road, param$extraction$road_buffer/2, endCapStyle = "FLAT")
-  poly2 <- sf::st_buffer(road, param$extraction$road_buffer/2)
-  sf::st_agr(poly1) <- "constant"
-  sf::st_agr(poly2) <- "constant"
-  poly3 <- sf::st_geometry(sf::st_difference(poly2, poly1))
+  caps  <- make_caps(road, param)
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
@@ -324,7 +318,7 @@ find_path = function(trans, road, A, B, param)
   len  <- sf::st_length(path)
   path <- sf::st_simplify(path, dTolerance = 3)
   path <- sf::st_set_crs(path, sf::NA_crs_) |> sf::st_set_crs(sf::st_crs(road))
-  path <- sf::st_difference(path, poly3)
+  path <- sf::st_difference(path, caps)
   #path$cost <- cost
   #path$cost_per_unit <- cost/len
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
@@ -376,3 +370,35 @@ rOverlay = function(las, res, start = c(0,0), buffer = 0)
   raster::crs(layout) <- raster::crs(las)
   return(layout)
 }
+
+make_caps <- function(road, param)
+{
+  XY <- sf::st_coordinates(road)[,1:2]
+  n <- nrow(XY)
+  buf <- param[["extraction"]][["road_buffer"]]/2
+
+  start <- sf::st_sfc(sf::st_linestring(XY[1:2,]), crs = sf::st_crs(road))
+  end <- sf::st_sfc(sf::st_linestring(XY[(n-1):n,]), crs = sf::st_crs(road))
+
+  poly1 <- sf::st_geometry(sf::st_buffer(start, buf, endCapStyle = "FLAT"))
+  poly2 <- sf::st_geometry(sf::st_buffer(end,   buf, endCapStyle = "FLAT"))
+  poly3 <- sf::st_geometry(sf::st_buffer(road, buf))
+
+  A <- lwgeom::st_startpoint(road)
+  B <- lwgeom::st_endpoint(road)
+
+  cap_A <- sf::st_buffer(A, buf)
+  cap_B <- sf::st_buffer(B, buf)
+
+  caps_A <- sf::st_difference(cap_A, poly1)
+  caps_A <- sf::st_cast(caps_A, "POLYGON")
+  caps_A <- caps_A[which.max(sf::st_area(caps_A))]
+
+  caps_B <- sf::st_difference(cap_B, poly2)
+  caps_B <- sf::st_cast(caps_B, "POLYGON")
+  caps_B <- caps_B[which.max(sf::st_area(caps_B))]
+
+  caps <- c(caps_A, caps_B)
+  return(sf::st_union(caps))
+}
+
