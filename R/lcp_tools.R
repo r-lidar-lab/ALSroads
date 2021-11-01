@@ -72,9 +72,19 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   Z = nlas$Z
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
-  irange <- lidR:::rOverlay(nlas, dtm, buffer = 0)
-  imax   <- lidR:::C_rasterize(nlas, irange, FALSE, 1L)
-  imin   <- lidR:::C_rasterize(nlas, irange, FALSE, 2L)
+  irange <- rOverlay(nlas, dtm, buffer = 0)
+
+  if (packageVersion("lidR") < "4.0.0")
+  {
+    imax <- lidR:::C_rasterize(nlas, irange, FALSE, 1L)
+    imin <- lidR:::C_rasterize(nlas, irange, FALSE, 2L)
+  }
+  else
+  {
+    imax <- lidR:::fasterize(nlas, irange, 0, "max")
+    imin <- lidR:::fasterize(nlas, irange, 0, "min")
+  }
+
   irange[] <- imax - imin
   nlas@data[["Z"]] <- Z
 
@@ -343,4 +353,26 @@ sobel <- function(img)
   edata <- sqrt(hdata^2 + vdata^2)
   edata[nas] <- NA
   edata
+}
+
+rOverlay = function(las, res, start = c(0,0), buffer = 0)
+{
+  if (is(res, "RasterLayer"))
+  {
+    resolution <- raster::res(res)
+    if (round(resolution[1], 4) != round(resolution[2], 4))
+      stop("Rasters with different x y resolutions are not supported", call. = FALSE)
+
+    return(raster::raster(res))
+  }
+
+  bbox      <- raster::extent(las) + 2 * buffer
+  bbox@xmin <- lidR:::round_any(bbox@xmin - 0.5 * res - start[1], res) + start[1]
+  bbox@xmax <- lidR:::round_any(bbox@xmax - 0.5 * res - start[1], res) + res + start[1]
+  bbox@ymin <- lidR:::round_any(bbox@ymin - 0.5 * res - start[2], res) + start[2]
+  bbox@ymax <- lidR:::round_any(bbox@ymax - 0.5 * res - start[2], res) + res + start[2]
+  layout    <- suppressWarnings(raster::raster(bbox, res = res, crs = lidR::projection(las)))
+  layout@data@values <- rep(NA, raster::ncell(layout))
+  raster::crs(layout) <- raster::crs(las)
+  return(layout)
 }
