@@ -88,6 +88,8 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
+  length_min = 4*param$extraction$section_length
+
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
   new_road <- road
   new_road$ROADWIDTH     <- NA
@@ -116,8 +118,8 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 
   # Cut the road is too long or lopp
   len <- as.numeric(sf::st_length(road))
-  if (len < 40) {
-    warning("Too short road to compute anything.", call. = FALSE)
+  if (len < length_min) {
+    warning(glue::glue("Too short (< {length_min} m) road to compute anything. Original road returned."), call. = FALSE)
     verbose("Done\n") ; cat("\n")
     return(new_road)
   }
@@ -184,9 +186,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       return(new_road)
     }
 
-    if (as.numeric(sf::st_length(res)) < 50)
+    if (as.numeric(sf::st_length(res)) < length_min)
     {
-      warning("The new road is too short too compute anything", call. = FALSE)
+      warning(glue::glue("The computed road is too short (< {length_min} m) to compute anything. Original road returned."), call. = FALSE)
       new_road$ROADWIDTH     <- NA
       new_road$DRIVABLEWIDTH <- NA
       new_road$RIGHTOFWAY    <- NA
