@@ -116,7 +116,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (d < param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
     param[["extraction"]][["road_buffer"]] = d/(param[["extraction"]][["road_buffer"]]+5)*param[["extraction"]][["road_buffer"]]
 
-  # Cut the road is too long or lopp
+  # Cut the road is too long or is loop
   len <- as.numeric(sf::st_length(road))
   if (len < length_min) {
     warning(glue::glue("Too short (< {length_min} m) road to compute anything. Original road returned."), call. = FALSE)
@@ -222,6 +222,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   end = sf::st_set_crs(end, sf::NA_crs_)
   end = sf::st_set_crs(end, sf::st_crs(las))
   segment_metrics <- rbind(segment_metrics, end)
+
+  if (isFALSE(dots$reconstruct_line))
+    return(segment_metrics)
 
   # We can also improve the coarse measurement given by least cost path
   if (param[["constraint"]][["confidence"]] < 1 && nrow(segment_metrics) > 4L)
