@@ -17,19 +17,33 @@ segment_road_metrics = function(nlas_segment, param)
   # in case the map provided is no strictly exact
   Xr <- Y <- NULL
   D <- dd2[Xr >= xc-7 & Xr <= xc + 7]
+
   sdZ  <- ma(D$sdZ, 12)
   sdZ  <-  sdZ/max(sdZ, na.rm= T)
+
+  ngnd_max <- max(D$ngnd, na.rm = TRUE)
+  if (ngnd_max == 0) ngnd_max = 1
+
   ngnd <- ma(D$ngnd, 12)
-  ngnd <- ngnd/max(ngnd, na.rm = T)
+  ngnd <- ngnd/ngnd_max
   ngnd <- 1 - (ngnd - min(ngnd, na.rm = T))
+
   cvi  <- ma(D$cvi, 12)
-  cvi  <-  cvi/max(cvi, na.rm = T)
+  cvi  <- cvi/max(cvi, na.rm = T)
   all  <- sdZ + 2*ngnd + cvi
-  lm1  <- stats::lm(all~ D$Xr + I(D$Xr^2))
+
+  tryCatch(
+  {
+    lm1  <- stats::lm(all~ D$Xr + I(D$Xr^2))
+  },
+  error = function(e)
+  {
+    stop("linear model failure")
+  })
+
   coe  <- stats::coefficients(lm1)
   u    <- -coe[2]/(2*coe[3])
   if (coe[3] > 0 & u < 5 & u > -5) xc <- u
-
 
   # Normalize but relatively to the road only to get a flat and horizontal road
   dtm <- lidR::grid_terrain(las_segment, param[["extraction"]][["profile_resolution"]], lidR::knnidw(), fast = TRUE, Wdegenerated = FALSE)
@@ -145,9 +159,7 @@ compute_gnd_profiles = function(road_norm_pslice, res = 0.25)
   Z <- Y <-Classification <- ReturnNumber <- .N <- Xr <- NULL
   dd <- road_norm_pslice@data[Classification %in% c(2L, 9L), list(sdZ = fsd(Z), avgZ = mean(Z), pfgnd = sum(ReturnNumber == 1)/.N), by = list(Xr = lidR:::round_any(Y, res))]
   data.table::setkey(dd, Xr)
-  dd$sdZ <- zoo::na.approx(dd$sdZ, na.rm = F)
   dd$ssdZ <- ma(dd$sdZ)
-  dd$avgZ <- zoo::na.approx(dd$avgZ, na.rm = F)
   dd$avgZ <- ma(dd$avgZ)
   dd
 }

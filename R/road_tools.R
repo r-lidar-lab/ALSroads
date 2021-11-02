@@ -248,25 +248,25 @@ road_measure = function(las, road, param)
     data.table::setattr(nlas_segment, "rotation", rot)
     data.table::setattr(nlas_segment, "offset", center)
 
-    # Computation of the metrics. The output is either the location of the road segment +
-    # a location score if we are in search mode or the metrics (state, width, ...) of the
-    # road segment.
     # /!\ Here again there are many rare cases were it could fail such as water only + bridge,
     # missing points. Hard to find each specific case. Few error along the road are allowed
     # with the try-catch block
-    m <- tryCatch({ segment_road_metrics(nlas_segment, param)},
-      error = function(e)
+    m <- tryCatch(
+    {
+      segment_road_metrics(nlas_segment, param)
+    },
+    error = function(e)
+    {
+      if (isTRUE(getOption("MFFProads.debug")))
       {
-        if (isTRUE(getOption("MFFProads.debug")))
-        {
-          f <- tempfile(fileext = ".las")
-          nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
-          lidR::writeLAS(nlas_segment, f)
-          message(glue::glue("Computation impossible in segment {i}. segment_*_metrics() failed with error : {e} "))
-          message(glue::glue("The LAS objects that caused the failure has been saved in {f}. segment_metrics()"))
-        }
-        return(NULL)
-      })
+        f <- tempfile(fileext = ".las")
+        nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
+        lidR::writeLAS(nlas_segment, f)
+        cat(glue::glue("Computation impossible in segment {i}. segment_road_metrics() failed with error : {e}\n"))
+        cat(glue::glue("The LAS objects that caused the failure has been saved in {f}.\n"))
+      }
+      return(NULL)
+    })
 
     if (is.null(m)) next
 

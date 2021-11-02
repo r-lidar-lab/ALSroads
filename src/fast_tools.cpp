@@ -9,6 +9,9 @@ double fsd(SEXP x)
   int k = 1;
   int n = LENGTH(x);
 
+  if (n == 1 )
+    return NA_REAL;
+
   if (Rf_isReal(x))
   {
     double* px = REAL(x);
