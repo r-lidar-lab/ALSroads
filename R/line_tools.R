@@ -4,7 +4,7 @@
 #' and ensure getting topologically valid network.
 #'
 #' @param roads  multiples lines (sf format)
-#' @param tolerance numeric. Tolerance value used to snap the road endings
+#' @param tolerance numeric. Tolerance value in distance unit used to snap the road endings
 #'
 #' @return The same object provided in input but with corrected ending such as roads are connected.
 #' @export
@@ -23,26 +23,26 @@ st_snap_lines = function(roads, tolerance = 8)
   u <- do.call(c, u)
   sf::st_crs(u) <- sf::st_crs(roads)
 
-  v <- sf::st_is_within_distance(u, start, 5)
+  v <- sf::st_is_within_distance(u, start, 5/8*tolerance)
   for (i in seq_along(v))
   {
     ids <- v[[i]]
     for(j in ids)
     {
-      roads[j,]$geometry[[1]][1, 1] <- u[i][[1]][[1]]
-      roads[j,]$geometry[[1]][1, 2] <- u[i][[1]][[2]]
+      sf::st_geometry(roads[j,])[[1]][1, 1] <- u[i][[1]][[1]]
+      sf::st_geometry(roads[j,])[[1]][1, 2] <- u[i][[1]][[2]]
     }
   }
 
-  w <- st_is_within_distance(u, end, 5)
+  w <- st_is_within_distance(u, end, 5/8*tolerance)
   for (i in seq_along(w))
   {
     ids <- w[[i]]
     for(j in ids)
     {
-      n <- nrow(roads[j,]$geometry[[1]])
-      roads[j,]$geometry[[1]][n, 1] <- u[i][[1]][[1]]
-      roads[j,]$geometry[[1]][n, 2] <- u[i][[1]][[2]]
+      n <- nrow(sf::st_geometry(roads[j,])[[1]])
+      sf::st_geometry(roads[j,])[[1]][n, 1] <- u[i][[1]][[1]]
+      sf::st_geometry(roads[j,])[[1]][n, 2] <- u[i][[1]][[2]]
     }
   }
 
