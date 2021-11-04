@@ -89,12 +89,11 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAScatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
+  if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but geographic found insteand.", call. = FALSE)
   if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
-  dist_unit <- st_crs(road)$units
-  if (is.null(dist_unit)) stop("Expecting a projected CRS for 'road'", call. = FALSE)
-  
+  dist_unit <- sf::st_crs(road)$units
   length_min = 4*param$extraction$section_length
 
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early

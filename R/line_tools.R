@@ -23,7 +23,7 @@ st_snap_lines = function(roads, tolerance = 8)
   u <- do.call(c, u)
 
   if (is.null(u)) {
-    dist_unit <- st_crs(u)$units
+    dist_unit <- sf::st_crs(u)$units
     warning(glue::glue("No roads could be snapped with the tolerance used ({tolerance} {dist_unit}). Original roads returned."), call. = FALSE)
     return(roads)
   }
