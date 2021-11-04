@@ -52,6 +52,15 @@ st_snap_lines = function(roads, tolerance = 8)
     }
   }
 
+  end   <- lwgeom::st_endpoint(roads)
+  start <- lwgeom::st_startpoint(roads)
+  idx_idem <- which(end == start)
+
+  if (length(idx_idem)) {
+    idx_roads <- glue::glue_collapse(idx_idem, ", ")
+    warning(glue::glue("The following roads had both of their ends being snapped together: {idx_roads}"), call. = FALSE)
+  }
+
   return(roads)
 }
 
