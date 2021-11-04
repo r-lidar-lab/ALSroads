@@ -21,6 +21,12 @@ st_snap_lines = function(roads, tolerance = 8)
   u <- lapply(u, function(x) { ends[x] })
   u <- lapply(u, function(x) { sf::st_sfc(sf::st_point(colMeans(sf::st_coordinates(x)))) })
   u <- do.call(c, u)
+
+  if (is.null(u)) {
+    warning(glue::glue("No roads could be snapped with the tolerance used ({tolerance} m). Original roads returned."), call. = FALSE)
+    return(roads)
+  }
+
   sf::st_crs(u) <- sf::st_crs(roads)
 
   v <- sf::st_is_within_distance(u, start, 5)
