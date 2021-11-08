@@ -215,7 +215,7 @@ st_angles <- function(line)
     angles[i] <- angle(u,v)
   }
 
-   return(angles[-c(1,n)])
+   return(abs(angles[-c(1,n)]))
 }
 
 angle <- function(x,y)
