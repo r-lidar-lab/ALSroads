@@ -19,7 +19,8 @@ segment_road_metrics = function(nlas_segment, param)
   D <- dd2[Xr >= xc-7 & Xr <= xc + 7]
 
   sdZ  <- ma(D$sdZ, 12)
-  sdZ  <-  sdZ/max(sdZ, na.rm= T)
+  if (!all(is.na(sdZ)))
+    sdZ  <-  sdZ/max(sdZ, na.rm= T)
 
   ngnd_max <- max(D$ngnd, na.rm = TRUE)
   if (ngnd_max == 0) ngnd_max = 1
@@ -32,21 +33,26 @@ segment_road_metrics = function(nlas_segment, param)
   cvi  <- cvi/max(cvi, na.rm = T)
   all  <- sdZ + 2*ngnd + cvi
 
-  tryCatch(
+  if (sum(!is.na(all)) > 3)
   {
-    lm1  <- stats::lm(all~ D$Xr + I(D$Xr^2))
-  },
-  error = function(e)
-  {
-    stop("linear model failure")
-  })
+    tryCatch(
+    {
+      lm1  <- stats::lm(all~ D$Xr + I(D$Xr^2))
+    },
+    error = function(e)
+    {
+      stop("linear model failure")
+    })
 
-  coe  <- stats::coefficients(lm1)
-  u    <- -coe[2]/(2*coe[3])
-  if (coe[3] > 0 & u < 5 & u > -5) xc <- u
+    coe  <- stats::coefficients(lm1)
+    u    <- -coe[2]/(2*coe[3])
+    if (coe[3] > 0 & u < 5 & u > -5) xc <- u
+    if (xc < min(D$Xr)) xc <- min(D$Xr)
+    if (xc > max(D$Xr)) xc <- max(D$Xr)
+  }
 
   # Normalize but relatively to the road only to get a flat and horizontal road
-  dtm <- lidR::grid_terrain(las_segment, param[["extraction"]][["profile_resolution"]], lidR::knnidw(), fast = TRUE, Wdegenerated = FALSE)
+  dtm <- lidR::grid_terrain(las_segment, param[["extraction"]][["profile_resolution"]], lidR::knnidw(), fast = TRUE, Wdegenerated = FALSE, full_raster = T)
   road_dtm <- make_road_dtm(dtm, xc)
   road_norm_segment <- lidR::normalize_height(las_segment, road_dtm, na.rm = TRUE)
 
@@ -283,7 +289,7 @@ find_road_edges = function(profiles, xc, accotement, thsd = 0.1, thz = 0.15)
   else
     pos1 = nrow(dd)
 
-  if (length(right) > 0)
+  if (length(left) > 0)
     pos2 = screen_profile(left, sdZ, avgZ, thsd, thz)
   else
     pos2 = 1
@@ -300,6 +306,8 @@ find_drivable_edges = function(profiles, true_edges, xc)
   Xr <- NULL
   dd2 = profiles
   dd2 = dd2[Xr >= true_edges[1] & Xr <= true_edges[2]]
+
+  if (nrow(dd2) == 1) return(list(center = xc, edges = c(xc,xc)))
 
   idx = which(dd2$pabove05 < min(dd2$pabove05, na.rm = TRUE)+0.01)
   if (is.na(idx[1])) idx = which(dd2$pabove2 < min(dd2$pabove2, na.rm = TRUE)+0.01)

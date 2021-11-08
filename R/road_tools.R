@@ -268,6 +268,19 @@ road_measure = function(las, road, param)
         cat("\n")
       }
       return(NULL)
+    },
+    warning = function(e)
+    {
+      if (isTRUE(getOption("MFFProads.debug")))
+      {
+        f <- tempfile(fileext = ".las")
+        nlas_segment <- lidR::add_lasattribute(nlas_segment, name = "Zref", desc = "Absolute Elvation")
+        lidR::writeLAS(nlas_segment, f)
+        cat("\n")
+        cat(glue::glue("Computation warning in segment {i}. segment_road_metrics() failed with error : {e}\n"))
+        cat(glue::glue("The LAS objects that caused the failure has been saved in {f}.\n"))
+        cat("\n")
+      }
     })
 
     if (is.null(m)) next
