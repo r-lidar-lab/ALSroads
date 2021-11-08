@@ -93,6 +93,15 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
+  angles <- st_angles(road)
+  if (any(angles > 90))
+  {
+    if (any(angles[c(1, length(angles))] > 90))
+      warning("Angles above 90 degrees at the begining of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
+    else
+      warning("Angles above 90 degrees between two consecutives segment of the input road. This is weird and may lead to invalid outputs.")
+  }
+
   dist_unit <- sf::st_crs(road)$units
   length_min = 4*param$extraction$section_length
 

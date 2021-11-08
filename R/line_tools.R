@@ -191,3 +191,38 @@ st_is_loop = function(line)
   d  <- as.numeric(sf::st_distance(p1,p2)[1,1])
   return(d < 2)
 }
+
+st_angles <- function(line)
+{
+  M <- sf::st_coordinates(line)
+  M <- M[,-3]
+
+  n = nrow(M)
+  if (n < 3) return(0)
+
+  angles <- numeric(n)
+  angles[] <- NA_real_
+  for (i in 2:(n-1))
+  {
+    Ax = M[i-1,1]
+    Ay = M[i-1,2]
+    Bx = M[i,1]
+    By = M[i,2]
+    Cx = M[i+1,1]
+    Cy = M[i+1,2]
+    u <- c(Bx-Ax, By-Ay)
+    v <- c(Cx-Bx, Cy-By)
+    angles[i] <- angle(u,v)
+  }
+
+   return(angles[-c(1,n)])
+}
+
+angle <- function(x,y)
+{
+  dot.prod <- x%*%y
+  norm.x <- norm(x,type="2")
+  norm.y <- norm(y,type="2")
+  theta <- acos(dot.prod / (norm.x * norm.y))
+  as.numeric(theta)*180/pi
+}

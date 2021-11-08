@@ -262,8 +262,10 @@ mask_conductivity <- function(conductivity, road, param)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
     xy <- lidR::LAS(xy, lidR::LASheader(xy))
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps)), 1)
-    conductivity[res] <- mean(conductivity[], na.rm = T)
+    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
+    conductivity[res] <- 1
+    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
+    conductivity[res] <- 0
 
     if (getOption("MFFProads.debug.finding"))
       raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
@@ -309,7 +311,7 @@ transition <- function(conductivity)
 
 find_path = function(trans, road, A, B, param)
 {
-  caps  <- make_caps(road, param)
+  caps  <- make_caps(road, param)$caps
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
@@ -334,7 +336,7 @@ find_path = function(trans, road, A, B, param)
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
 
   if (getOption("MFFProads.debug.finding"))
-    plot(sf::st_geometry(path), col = "red", add = T)
+    plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
 
   return(path)
 }
@@ -387,8 +389,18 @@ make_caps <- function(road, param)
   n <- nrow(XY)
   buf <- param[["extraction"]][["road_buffer"]]/2
 
-  start <- sf::st_sfc(sf::st_linestring(XY[1:2,]), crs = sf::st_crs(road))
-  end <- sf::st_sfc(sf::st_linestring(XY[(n-1):n,]), crs = sf::st_crs(road))
+  angles <- st_angles(road)
+  start_angle <- angles[1]
+  end_angle <- angles[length(angles)]
+
+  ii <- 2
+  if (start_angle > 90) ii <- 2
+
+  jj <- n-1
+  if (end_angle > 90) jj <- n-2
+
+  start <- sf::st_sfc(sf::st_linestring(XY[c(1,ii),]), crs = sf::st_crs(road))
+  end <- sf::st_sfc(sf::st_linestring(XY[c(jj,n),]), crs = sf::st_crs(road))
 
   poly1 <- sf::st_geometry(sf::st_buffer(start, buf, endCapStyle = "FLAT"))
   poly2 <- sf::st_geometry(sf::st_buffer(end,   buf, endCapStyle = "FLAT"))
@@ -400,15 +412,24 @@ make_caps <- function(road, param)
   cap_A <- sf::st_buffer(A, buf)
   cap_B <- sf::st_buffer(B, buf)
 
+  shield_A <- sf::st_buffer(A, buf - 4)
+  shield_B <- sf::st_buffer(B, buf - 4)
+  shield <- sf::st_union(shield_A, shield_B)
+
   caps_A <- sf::st_difference(cap_A, poly1)
   caps_A <- sf::st_cast(caps_A, "POLYGON")
-  caps_A <- caps_A[which.max(sf::st_area(caps_A))]
+  if (length(caps_A) > 1)
+    caps_A <- caps_A[which.max(sf::st_area(caps_A))]
 
   caps_B <- sf::st_difference(cap_B, poly2)
   caps_B <- sf::st_cast(caps_B, "POLYGON")
-  caps_B <- caps_B[which.max(sf::st_area(caps_B))]
+  if (length(caps_B) > 1)
+    caps_B <- caps_B[which.max(sf::st_area(caps_B))]
 
   caps <- c(caps_A, caps_B)
-  return(sf::st_union(caps))
+  caps <- sf::st_union(caps)
+  shield <- sf::st_difference(caps, shield)
+
+  return(list(caps = caps, shields = shield))
 }
 
