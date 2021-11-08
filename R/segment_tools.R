@@ -174,6 +174,9 @@ compute_veg_profiles = function(nlas_segment, res = 0.5)
 {
   right <- Classification <- Y <- Z <- Intensity <- .N <- Xr <- NULL
 
+  if (!"Intensity" %in% names(nlas_segment))
+    nlas_segment@data[["Intensity"]] <- 0L
+
   dd <- nlas_segment@data[, list(ngnd = sum(Classification == 2),
                                  nabove2 = sum(Z >= 2 & Z < 5),
                                  nabove05 = sum(Z >= 0.5 & Z < 5),

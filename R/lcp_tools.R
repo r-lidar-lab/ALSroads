@@ -1,5 +1,7 @@
 grid_conductivity <- function(las, road, dtm, water = NULL)
 {
+  use_intensity <- "Intensity" %in% names(las@data)
+
   verbose("Computing conductivity maps...\n")
 
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
@@ -66,6 +68,8 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   })
   verbose("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
+  if (use_intensity)
+  {
   dt <- system.time({
   q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
   nlas@data[Intensity > 2L*q, Intensity := 2L*q]
@@ -103,6 +107,12 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     raster::plot(conductivity_intensity, col = viridis::viridis(3), main = "Conductivity intensity")
   })
   verbose("   - Intensity conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  }
+  else
+  {
+    conductivity_intensity <- rOverlay(nlas, dtm, buffer = 0)
+    conductivity_intensity[] <- 0
+  }
 
   dt <- system.time({
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
@@ -155,7 +165,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
 
   dt <- system.time({
-  max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1 + 1)
+  max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1 + as.numeric(use_intensity))
   conductivity_all <- conductivity_slope * d12 * conductivity_edge * (2 * conductivity_density + conductivity_chm + conductivity_rough + conductivity_intensity)
   conductivity_all <- conductivity_all/max_coductivity
   })
