@@ -67,8 +67,8 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   verbose("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
   dt <- system.time({
-  q <- stats::quantile(las$Intensity, probs = 0.98)
-  nlas@data[Intensity > 2*q, Intensity := 2*q]
+  q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
+  nlas@data[Intensity > 2L*q, Intensity := 2L*q]
 
   Z = nlas$Z
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
