@@ -97,9 +97,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (any(angles > 90))
   {
     if (any(angles[c(1, length(angles))] > 90))
-      warning("Angles above 90 degrees at the begining of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
+      warning("Angle above 90 degrees at one or both ends of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
     else
-      warning("Angles above 90 degrees between two consecutives segment of the input road. This is weird and may lead to invalid outputs.")
+      warning("Angle above 90 degrees between two consecutive segments of the input road. This is weird and may lead to invalid outputs.")
   }
 
   dist_unit <- sf::st_crs(road)$units
