@@ -16,6 +16,7 @@ Imports:
     stats,
     Rcpp,
     data.table,
+    dplyr,
     raster,
     lwgeom,
     glue,
