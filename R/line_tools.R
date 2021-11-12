@@ -81,66 +81,64 @@ st_snap_lines = function(roads, tolerance = 8)
 #' @export
 st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
 {
-  if (!all(sort(unique(roads[[field]])) == sort(unique(roads_ori[[field]])))) stop("Range of unique field in both road datasets is not the same.", call. = FALSE)
-  if (nrow(roads) != nrow(roads_ori)) stop("Size of both road datasets is not the same.", call. = FALSE)
+  IDs1 <- sort(unique(roads[[field]]))
+  IDs2 <- sort(unique(roads_ori[[field]]))
+  if (!all(IDs1 == IDs2)) stop("Values in unique identifier field are not the same in both road datasets.", call. = FALSE)
   
   dist_unit <- sf::st_crs(roads)$units
-
+  
   # Arrange both road datasets to make sure
   # that line indices will match between them
-  roads <- dplyr::arrange(roads, .data[[field]])
-  roads_ori <- dplyr::arrange(roads_ori, .data[[field]])
+  roads <- dplyr::arrange(roads, field)
+  roads_ori <- dplyr::arrange(roads_ori, field)
   
-
+  prepare_data <- function(roads, end)
+  {
+    if (end) {
+      get_end <- lwgeom::st_endpoint
+      suf <- sapply(sf::st_geometry(roads), nrow)
+    } else {
+      get_end <- lwgeom::st_startpoint
+      suf <- 1
+    }
+    
+    out <- get_end(roads) |>
+      sf::st_coordinates() |>
+      dplyr::as_tibble() |>
+      dplyr::mutate(pos = 1:nrow(roads)) |>
+      dplyr::mutate(limit = suf) |>
+      dplyr::mutate(id = paste0(roads[[field]], "_", end))
+    
+    return(out)
+  }
+  
   # For the corrected roads, extraction of end points coordinates
   # and association with a unique identifier
-  tb_endpoint <- lwgeom::st_endpoint(roads) %>%
-    sf::st_coordinates() %>%
-    as_tibble() %>%
-    dplyr::mutate(pos = 1:nrow(roads)) %>%
-    dplyr::mutate(limit = "end") %>%
-    dplyr::mutate(id = paste0(roads[[field]], "_", limit))
-  
-  tb_startpoint <- lwgeom::st_startpoint(roads) %>%
-    sf::st_coordinates() %>%
-    as_tibble() %>%
-    dplyr::mutate(pos = 1:nrow(roads)) %>%
-    dplyr::mutate(limit = "start") %>%
-    dplyr::mutate(id = paste0(roads[[field]], "_", limit))
-  
+  tb_endpoint <- prepare_data(roads, TRUE)
+  tb_startpoint <- prepare_data(roads, FALSE)
   tb_ends_roads <- rbind(tb_endpoint, tb_startpoint)
   
   # For the non-corrected roads, extraction of end points coordinates
   # and association with a unique identifier
-  tb_endpoint <- lwgeom::st_endpoint(roads_ori) %>%
-    sf::st_coordinates() %>%
-    as_tibble() %>%
-    dplyr::mutate(pos = 1:nrow(roads_ori)) %>%
-    dplyr::mutate(limit = "end") %>%
-    dplyr::mutate(id = paste0(roads_ori[[field]], "_", limit))
-  
-  tb_startpoint <- lwgeom::st_startpoint(roads_ori) %>%
-    sf::st_coordinates() %>%
-    as_tibble() %>%
-    dplyr::mutate(pos = 1:nrow(roads_ori)) %>%
-    dplyr::mutate(limit = "start") %>%
-    dplyr::mutate(id = paste0(roads_ori[[field]], "_", limit))
-  
+  tb_endpoint <- prepare_data(roads_ori, TRUE)
+  tb_startpoint <- prepare_data(roads_ori, FALSE)
   tb_ends_ori <- rbind(tb_endpoint, tb_startpoint)
-  
   
   # List of distinct connected nodes in the
   # non-corrected road dataset
   tb_nodes <- dplyr::distinct(tb_ends_ori, X, Y)
-  ls_group_ids <- lapply(1:nrow(tb_nodes), function(ii) {
+  ls_group_ids <- lapply(1:nrow(tb_nodes), function(ii) 
+  {
     dplyr::filter(tb_ends_ori, X == tb_nodes[ii,][["X"]] & Y == tb_nodes[ii,][["Y"]])[["id"]]
   })
   
   
-  for(ii in 1:nrow(tb_nodes)) {
+  for (ii in 1:nrow(tb_nodes))
+  {
     group_ids <- ls_group_ids[[ii]]
-    if(length(group_ids) > 1) {
-      
+    
+    if (length(group_ids) > 1) 
+    {
       # Coordinates of the original road node
       x_ori <- tb_nodes[ii,][["X"]]
       y_ori <- tb_nodes[ii,][["Y"]]
@@ -156,24 +154,27 @@ st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
       
       # Check for tolerance
       max_dist <- max(sqrt((tb_node_cor[["X"]] - x_new)^2 + (tb_node_cor[["Y"]] - y_new)^2))
-      if (max_dist > tolerance){
+      if (max_dist > tolerance)
+      {
         pos <- tb_node_cor[["pos"]]
         values_field <- glue::glue_collapse(roads[pos,][[field]], ", ")
         warning(glue::glue("Roads with {field} == {values_field} could not be snapped together due to the tolerance used ({max_dist} > {tolerance} {dist_unit}). Original roads returned."), call. = FALSE)
-      } else {
+      } 
+      else 
+      {
         # Update coordinates
-        for(j in seq_along(group_ids)){
+        for (j in seq_along(group_ids))
+        {
           pos <- tb_node_cor[j,][["pos"]]
-          n <- 1
-          if(tb_node_cor[j,][["limit"]] == "end"){
-            n <- nrow(sf::st_geometry(roads[pos,])[[1]])
-          }
+          n <- tb_node_cor[j,][["limit"]]
+          
           sf::st_geometry(roads[pos,])[[1]][n, 1] <- x_new
           sf::st_geometry(roads[pos,])[[1]][n, 2] <- y_new
         }
       }
     }
   }
+  
   return(roads)
 }
 
