@@ -408,7 +408,7 @@ make_caps <- function(road, param)
   end_angle <- angles[length(angles)]
 
   ii <- 2
-  if (start_angle > 90) ii <- 2
+  if (start_angle > 90) ii <- 3
 
   jj <- n-1
   if (end_angle > 90) jj <- n-2
