@@ -27,8 +27,6 @@
 #' library(lidR)
 #' library(sf)
 #' library(raster)
-#' library(mapview)
-#' library(leaflet)
 #'
 #' dir  <- system.file("extdata", "", package="MFFProads")
 #' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
@@ -36,10 +34,9 @@
 #' ctg  <- readLAScatalog(dir)
 #' road <- st_read(road, quiet = TRUE)
 #' dtm  <- raster(dtm)
-#' crs  <- st_crs(road)
-#' crs(dtm)  <- crs
 #'
 #' # Voluntarily add more error to the road
+#' crs <- st_crs(road)
 #' st_geometry(road) <- st_geometry(road) + st_sfc(st_point(c(-8, 0)))
 #' st_crs(road) <- crs
 #'
@@ -54,7 +51,10 @@
 #' plot(st_geometry(road), col = "red") # Inaccurate road track
 #' plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 #'
-#' url = "https://servicesmatriciels.mern.gouv.qc.ca:443/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+#' domain <- "https://servicesmatriciels.mern.gouv.qc.ca:443"
+#' path <- "/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/"
+#' tiles <- "GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+#' url <- paste0(domain, path, tiles)
 #' m = mapview::mapview(list(road, poly),
 #'   layer.name = c("Inaccurate", "Corrected"),
 #'   color = c("red", "blue"), map.type = "Esri.WorldImagery")

@@ -71,6 +71,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (use_intensity)
   {
   dt <- system.time({
+  Intensity <- NULL
   q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
   nlas@data[Intensity > 2L*q, Intensity := 2L*q]
 
@@ -78,9 +79,9 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
 
 
-  if (packageVersion("lidR") < "4.0.0")
+  if (utils::packageVersion("lidR") < "4.0.0")
   {
-    lay  <- rOverlay(nlas, dtm, buffer = 0)
+    lay  <- lidR:::rOverlay(nlas, dtm, buffer = 0)
     imax <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
     imin <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
   }
@@ -265,7 +266,7 @@ mask_conductivity <- function(conductivity, road, param)
     names(xy) <- c("X", "Y", "Z")
     xy <- lidR::LAS(xy, lidR::LASheader(xy), crs = sf::st_crs(caps$caps))
 
-    if (packageVersion("lidR") < "4.0.0")
+    if (utils::packageVersion("lidR") < "4.0.0")
     {
 
       res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
@@ -373,28 +374,6 @@ sobel <- function(img)
   edata <- sqrt(hdata^2 + vdata^2)
   edata[nas] <- NA
   edata
-}
-
-rOverlay = function(las, res, start = c(0,0), buffer = 0)
-{
-  if (is(res, "RasterLayer"))
-  {
-    resolution <- raster::res(res)
-    if (round(resolution[1], 4) != round(resolution[2], 4))
-      stop("Rasters with different x y resolutions are not supported", call. = FALSE)
-
-    return(raster::raster(res))
-  }
-
-  bbox      <- raster::extent(las) + 2 * buffer
-  bbox@xmin <- lidR:::round_any(bbox@xmin - 0.5 * res - start[1], res) + start[1]
-  bbox@xmax <- lidR:::round_any(bbox@xmax - 0.5 * res - start[1], res) + res + start[1]
-  bbox@ymin <- lidR:::round_any(bbox@ymin - 0.5 * res - start[2], res) + start[2]
-  bbox@ymax <- lidR:::round_any(bbox@ymax - 0.5 * res - start[2], res) + res + start[2]
-  layout    <- suppressWarnings(raster::raster(bbox, res = res, crs = lidR::projection(las)))
-  layout@data@values <- rep(NA, raster::ncell(layout))
-  raster::crs(layout) <- raster::crs(las)
-  return(layout)
 }
 
 make_caps <- function(road, param)

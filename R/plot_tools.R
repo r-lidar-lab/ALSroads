@@ -1,5 +1,7 @@
 plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, profiles_veg)#, profiles_veg)
 {
+  Xr <- NULL
+
   dd = profiles_gnd
   dd2 = profiles_veg
   X = road_norm_segment$Y
@@ -75,14 +77,14 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   coe  <- stats::coefficients(lm1)
   y = stats::predict(lm1, D)
 
-  lines(D$Xr, sdZ*5, col = "red")
-  lines(D$Xr, ngnd*5, col = "blue")
-  lines(D$Xr, cvi*5, col = "orange")
-  lines(D$Xr, all/4*5, col = "purple", lwd = 2)
-  lines(D$X, y/4*5, col = "green", lwd = 3)
+  graphics::lines(D$Xr, sdZ*5, col = "red")
+  graphics::lines(D$Xr, ngnd*5, col = "blue")
+  graphics::lines(D$Xr, cvi*5, col = "orange")
+  graphics::lines(D$Xr, all/4*5, col = "purple", lwd = 2)
+  graphics::lines(D$X, y/4*5, col = "green", lwd = 3)
 
   graphics::legend(x = "bottomright",
-                   legend = c("Std. Z", "Ground points", "Intensity", "Average", "ax²+bx+c"),
+                   legend = c("Std. Z", "Ground points", "Intensity", "Average", "ax\u00B2+bx+c"),
                    col = c("red", "blue", "orange", "purple", "green"),
                    lty = 1,
                    lwd = c(1,1,1,2,3))

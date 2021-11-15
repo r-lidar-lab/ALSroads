@@ -41,7 +41,7 @@ st_snap_lines = function(roads, tolerance = 8)
     }
   }
 
-  w <- st_is_within_distance(u, end, tolerance)
+  w <- sf::st_is_within_distance(u, end, tolerance)
   for (i in seq_along(w))
   {
     ids <- w[[i]]

@@ -9,7 +9,7 @@ st_snap_lines(roads, tolerance = 8)
 \arguments{
 \item{roads}{multiples lines (sf format)}
 
-\item{tolerance}{numeric. Tolerance value used to snap the road endings}
+\item{tolerance}{numeric. Tolerance value in distance unit used to snap the road endings}
 }
 \value{
 The same object provided in input but with corrected ending such as roads are connected.
