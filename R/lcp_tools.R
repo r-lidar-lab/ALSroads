@@ -76,20 +76,21 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   Z = nlas$Z
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
-  irange <- rOverlay(nlas, dtm, buffer = 0)
+
 
   if (packageVersion("lidR") < "4.0.0")
   {
-    imax <- lidR:::C_rasterize(nlas, irange, FALSE, 1L)
-    imin <- lidR:::C_rasterize(nlas, irange, FALSE, 2L)
+    lay  <- rOverlay(nlas, dtm, buffer = 0)
+    imax <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
+    imin <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
   }
   else
   {
-    imax <- lidR:::fasterize(nlas, irange, 0, "max")
-    imin <- lidR:::fasterize(nlas, irange, 0, "min")
+    imax <- lidR:::rasterize_fast(nlas, dtm, 0, "max")
+    imin <- lidR:::rasterize_fast(nlas, dtm, 0, "min")
   }
 
-  irange[] <- imax - imin
+  irange <- imax - imin
   nlas@data[["Z"]] <- Z
 
   if (getOption("MFFProads.debug.finding"))
@@ -257,15 +258,28 @@ mask_conductivity <- function(conductivity, road, param)
   dt <- system.time({
     # could use raster::cellFromPolygon but is slow
     conductivity <- f*conductivity
+
     xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
     xy <- as.data.frame(xy)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
-    xy <- lidR::LAS(xy, lidR::LASheader(xy))
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
-    conductivity[res] <- 1
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
-    conductivity[res] <- 0
+    xy <- lidR::LAS(xy, lidR::LASheader(xy), crs = sf::st_crs(caps$caps))
+
+    if (packageVersion("lidR") < "4.0.0")
+    {
+
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
+      conductivity[res] <- 1
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
+      conductivity[res] <- 0
+    }
+    else
+    {
+      res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
+      conductivity[res] <- 1
+      res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
+      conductivity[res] <- 0
+    }
 
     if (getOption("MFFProads.debug.finding"))
       raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
@@ -429,6 +443,9 @@ make_caps <- function(road, param)
   caps <- c(caps_A, caps_B)
   caps <- sf::st_union(caps)
   shield <- sf::st_difference(caps, shield)
+
+  sf::st_crs(caps) <- sf::st_crs(road)
+  sf::st_crs(shield) <- sf::st_crs(road)
 
   return(list(caps = caps, shields = shield))
 }
