@@ -90,7 +90,21 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAScatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
   if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but geographic CRS found instead.", call. = FALSE)
-  if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
+
+  if (!isFALSE(dots$Windex))
+  {
+    if (!lidR::is.indexed(ctg))
+    {
+      d <- density(ctg)
+      if (d < 5)
+        message("No spatial index for LAS/LAZ files in this collection.")
+      else if (d < 10)
+        warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+      else
+        stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    }
+  }
+
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
   angles <- st_angles(road)
@@ -275,7 +289,16 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 #' @rdname measure_road
 measure_roads = function(ctg, roads, dtm, water = NULL, param = mffproads_default_parameters)
 {
-  if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
+  if (!lidR::is.indexed(ctg))
+  {
+    d <- density(ctg)
+    if (d < 5)
+      message("No spatial index for LAS/LAZ files in this collection.")
+    else if (d < 10)
+      warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    else
+      stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+  }
 
   i <- 1:nrow(roads)
   res <- lapply(i, function(j)
