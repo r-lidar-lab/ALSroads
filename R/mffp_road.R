@@ -83,7 +83,7 @@
 measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_parameters, ...)
 {
   dots <- list(...)
-  lidR::opt_progress(ctg) <- FALSE
+  lidR::opt_progress(ctg) <- getOption("MFFProads.debug.verbose")
   geometry_type_road <- sf::st_geometry_type(road)
   if (geometry_type_road != "LINESTRING") stop(glue::glue("Expecting LINESTRING geometry for 'road' but {geometry_type_road} found instead."), call. = FALSE)
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
