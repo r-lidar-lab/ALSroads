@@ -223,6 +223,8 @@ angle <- function(x,y)
   dot.prod <- x%*%y
   norm.x <- norm(x,type="2")
   norm.y <- norm(y,type="2")
-  theta <- acos(dot.prod / (norm.x * norm.y))
-  as.numeric(theta)*180/pi
+  r <- as.numeric(dot.prod / (norm.x * norm.y))
+  if (r > 0.999999999) return(0)
+  theta <- acos(r)
+  return(theta*180/pi)
 }
