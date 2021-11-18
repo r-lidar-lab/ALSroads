@@ -229,8 +229,8 @@ mask_conductivity <- function(conductivity, road, param)
 {
   verbose("Computing conductivity masks...\n")
 
-  poly1 <- sf::st_buffer(road, param$extraction$road_buffer/2, endCapStyle = "FLAT")
-  hull  <- sf::st_buffer(road, param$extraction$road_buffer/2)
+  poly1 <- sf::st_buffer(road, param$extraction$road_buffer, endCapStyle = "FLAT")
+  hull  <- sf::st_buffer(road, param$extraction$road_buffer)
   caps  <- make_caps(road, param)
   poly4 <- sf::st_buffer(road, 1)
 
@@ -298,11 +298,11 @@ mask_conductivity <- function(conductivity, road, param)
 
 start_end_points = function(road, param)
 {
-  poly1 <- sf::st_buffer(road, param$extraction$road_buffer/2, endCapStyle = "FLAT")
+  poly1 <- sf::st_buffer(road, param$extraction$road_buffer, endCapStyle = "FLAT")
   start <- lwgeom::st_startpoint(road)
   end   <- lwgeom::st_endpoint(road)
-  start <- sf::st_buffer(start, param$extraction$road_buffer/2)
-  end <- sf::st_buffer(end, param$extraction$road_buffer/2)
+  start <- sf::st_buffer(start, param$extraction$road_buffer)
+  end <- sf::st_buffer(end, param$extraction$road_buffer)
   start <- sf::st_difference(start, poly1)
   end <- sf::st_difference(end, poly1)
   A <- sf::st_centroid(start)
@@ -385,7 +385,7 @@ make_caps <- function(road, param)
 {
   XY <- sf::st_coordinates(road)[,1:2]
   n <- nrow(XY)
-  buf <- param[["extraction"]][["road_buffer"]]/2
+  buf <- param[["extraction"]][["road_buffer"]]
 
   angles <- st_angles(road)
   start_angle <- angles[1]
