@@ -71,25 +71,31 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   if (use_intensity)
   {
   dt <- system.time({
+  Intensity <- NULL
   q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
   nlas@data[Intensity > 2L*q, Intensity := 2L*q]
 
   Z = nlas$Z
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
-  irange <- rOverlay(nlas, dtm, buffer = 0)
 
-  if (packageVersion("lidR") < "4.0.0")
+
+  if (utils::packageVersion("lidR") < "4.0.0")
   {
-    imax <- lidR:::C_rasterize(nlas, irange, FALSE, 1L)
-    imin <- lidR:::C_rasterize(nlas, irange, FALSE, 2L)
+    lay   <- lidR:::rOverlay(nlas, dtm, buffer = 0)
+    i_max <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
+    i_min <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
+    imin <- lay
+    imax <- lay
+    imin[] <- i_min
+    imax[] <- i_max
   }
   else
   {
-    imax <- lidR:::fasterize(nlas, irange, 0, "max")
-    imin <- lidR:::fasterize(nlas, irange, 0, "min")
+    imax <- lidR:::rasterize_fast(nlas, dtm, 0, "max")
+    imin <- lidR:::rasterize_fast(nlas, dtm, 0, "min")
   }
 
-  irange[] <- imax - imin
+  irange <- imax - imin
   nlas@data[["Z"]] <- Z
 
   if (getOption("MFFProads.debug.finding"))
@@ -257,15 +263,29 @@ mask_conductivity <- function(conductivity, road, param)
   dt <- system.time({
     # could use raster::cellFromPolygon but is slow
     conductivity <- f*conductivity
+
     xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
     xy <- as.data.frame(xy)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
     xy <- lidR::LAS(xy, lidR::LASheader(xy))
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
-    conductivity[res] <- 1
-    res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
-    conductivity[res] <- 0
+    lidR::projection(xy) <- sf::st_crs(caps$caps)
+
+    if (utils::packageVersion("lidR") < "4.0.0")
+    {
+
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
+      conductivity[res] <- 1
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
+      conductivity[res] <- 0
+    }
+    else
+    {
+      res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
+      conductivity[res] <- 1
+      res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
+      conductivity[res] <- 0
+    }
 
     if (getOption("MFFProads.debug.finding"))
       raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
@@ -361,28 +381,6 @@ sobel <- function(img)
   edata
 }
 
-rOverlay = function(las, res, start = c(0,0), buffer = 0)
-{
-  if (is(res, "RasterLayer"))
-  {
-    resolution <- raster::res(res)
-    if (round(resolution[1], 4) != round(resolution[2], 4))
-      stop("Rasters with different x y resolutions are not supported", call. = FALSE)
-
-    return(raster::raster(res))
-  }
-
-  bbox      <- raster::extent(las) + 2 * buffer
-  bbox@xmin <- lidR:::round_any(bbox@xmin - 0.5 * res - start[1], res) + start[1]
-  bbox@xmax <- lidR:::round_any(bbox@xmax - 0.5 * res - start[1], res) + res + start[1]
-  bbox@ymin <- lidR:::round_any(bbox@ymin - 0.5 * res - start[2], res) + start[2]
-  bbox@ymax <- lidR:::round_any(bbox@ymax - 0.5 * res - start[2], res) + res + start[2]
-  layout    <- suppressWarnings(raster::raster(bbox, res = res, crs = lidR::projection(las)))
-  layout@data@values <- rep(NA, raster::ncell(layout))
-  raster::crs(layout) <- raster::crs(las)
-  return(layout)
-}
-
 make_caps <- function(road, param)
 {
   XY <- sf::st_coordinates(road)[,1:2]
@@ -429,6 +427,9 @@ make_caps <- function(road, param)
   caps <- c(caps_A, caps_B)
   caps <- sf::st_union(caps)
   shield <- sf::st_difference(caps, shield)
+
+  sf::st_crs(caps) <- sf::st_crs(road)
+  sf::st_crs(shield) <- sf::st_crs(road)
 
   return(list(caps = caps, shields = shield))
 }

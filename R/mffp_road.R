@@ -27,8 +27,6 @@
 #' library(lidR)
 #' library(sf)
 #' library(raster)
-#' library(mapview)
-#' library(leaflet)
 #'
 #' dir  <- system.file("extdata", "", package="MFFProads")
 #' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
@@ -36,10 +34,9 @@
 #' ctg  <- readLAScatalog(dir)
 #' road <- st_read(road, quiet = TRUE)
 #' dtm  <- raster(dtm)
-#' crs  <- st_crs(road)
-#' crs(dtm)  <- crs
 #'
 #' # Voluntarily add more error to the road
+#' crs <- st_crs(road)
 #' st_geometry(road) <- st_geometry(road) + st_sfc(st_point(c(-8, 0)))
 #' st_crs(road) <- crs
 #'
@@ -54,7 +51,10 @@
 #' plot(st_geometry(road), col = "red") # Inaccurate road track
 #' plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 #'
-#' url = "https://servicesmatriciels.mern.gouv.qc.ca:443/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+#' domain <- "https://servicesmatriciels.mern.gouv.qc.ca:443"
+#' path <- "/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/"
+#' tiles <- "GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+#' url <- paste0(domain, path, tiles)
 #' m = mapview::mapview(list(road, poly),
 #'   layer.name = c("Inaccurate", "Corrected"),
 #'   color = c("red", "blue"), map.type = "Esri.WorldImagery")
@@ -83,7 +83,7 @@
 measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_parameters, ...)
 {
   dots <- list(...)
-  lidR::opt_progress(ctg) <- FALSE
+  lidR::opt_progress(ctg) <- getOption("MFFProads.debug.verbose")
   geometry_type_road <- sf::st_geometry_type(road)
   if (geometry_type_road != "LINESTRING") stop(glue::glue("Expecting LINESTRING geometry for 'road' but found {geometry_type_road} geometry instead."), call. = FALSE)
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
@@ -91,7 +91,21 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
   if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but found geographic CRS instead.", call. = FALSE)
   if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
-  if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
+
+  if (!isFALSE(dots$Windex))
+  {
+    if (!lidR::is.indexed(ctg))
+    {
+      d <- density(ctg)
+      if (d < 5)
+        message("No spatial index for LAS/LAZ files in this collection.")
+      else if (d < 10)
+        warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+      else
+        stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    }
+  }
+
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
   angles <- st_angles(road)
@@ -292,7 +306,16 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 #' @rdname measure_road
 measure_roads = function(ctg, roads, dtm, water = NULL, param = mffproads_default_parameters)
 {
-  if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.")
+  if (!lidR::is.indexed(ctg))
+  {
+    d <- density(ctg)
+    if (d < 5)
+      message("No spatial index for LAS/LAZ files in this collection.")
+    else if (d < 10)
+      warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    else
+      stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+  }
 
   i <- 1:nrow(roads)
   res <- lapply(i, function(j)
