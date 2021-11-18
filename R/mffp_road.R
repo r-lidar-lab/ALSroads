@@ -129,8 +129,8 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   p1 <- lwgeom::st_startpoint(road)
   p2 <- lwgeom::st_endpoint(road)
   d  <- as.numeric(sf::st_distance(p1, p2))
-  if (d < param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
-    param[["extraction"]][["road_buffer"]] <- d / (param[["extraction"]][["road_buffer"]] + 5) * param[["extraction"]][["road_buffer"]]
+  if (d < 2 * param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
+    param[["extraction"]][["road_buffer"]] <- (d / (2 * param[["extraction"]][["road_buffer"]] + 5) * 2 * param[["extraction"]][["road_buffer"]])/2
 
   # Cut the road is too long or is loop
   len <- as.numeric(sf::st_length(road))
