@@ -85,11 +85,12 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   dots <- list(...)
   lidR::opt_progress(ctg) <- FALSE
   geometry_type_road <- sf::st_geometry_type(road)
-  if (geometry_type_road != "LINESTRING") stop(glue::glue("Expecting LINESTRING geometry for 'road' but {geometry_type_road} found instead."), call. = FALSE)
+  if (geometry_type_road != "LINESTRING") stop(glue::glue("Expecting LINESTRING geometry for 'road' but found {geometry_type_road} geometry instead."), call. = FALSE)
   if (nrow(road) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
   if (!methods::is(ctg, "LAScatalog")) stop("Expecting a LAScatalog", call. = FALSE)
   if (!is.null(water)) { if (any(!sf::st_geometry_type(water) %in% c("MULTIPOLYGON", "POLYGON"))) stop("Expecting POLYGON geometry type for 'water'", call. = FALSE) }
-  if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but geographic CRS found instead.", call. = FALSE)
+  if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but found geographic CRS instead.", call. = FALSE)
+  if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
   if (!isFALSE(dots$Windex)) { if (!lidR::is.indexed(ctg)) message("No spatial index for LAS/LAZ files in this collection.") }
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
@@ -97,9 +98,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (any(angles > 90))
   {
     if (any(angles[c(1, length(angles))] > 90))
-      warning("Angle above 90 degrees at one or both ends of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
+      warning("Sharp turn (< 90 degrees) at one or both ends of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
     else
-      warning("Angle above 90 degrees between two consecutive segments of the input road. This is weird and may lead to invalid outputs.")
+      warning("Sharp turn (< 90 degrees) between two consecutive segments of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
   }
 
   dist_unit <- sf::st_crs(road)$units
@@ -129,12 +130,12 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   p2 <- lwgeom::st_endpoint(road)
   d  <- as.numeric(sf::st_distance(p1, p2))
   if (d < param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
-    param[["extraction"]][["road_buffer"]] = d/(param[["extraction"]][["road_buffer"]]+5)*param[["extraction"]][["road_buffer"]]
+    param[["extraction"]][["road_buffer"]] <- d / (param[["extraction"]][["road_buffer"]] + 5) * param[["extraction"]][["road_buffer"]]
 
   # Cut the road is too long or is loop
   len <- as.numeric(sf::st_length(road))
   if (len < length_min) {
-    warning(glue::glue("Too short (< {length_min} {dist_unit}) road to compute anything. Original road returned."), call. = FALSE)
+    warning(glue::glue("Road too short (< {length_min} {dist_unit}) to compute anything. Original road returned."), call. = FALSE)
     verbose("Done\n") ; cat("\n")
     return(new_road)
   }
@@ -211,7 +212,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       new_road$PABOVE2       <- NA
       new_road$SHOULDERS     <- NA
       new_road$SINUOSITY     <- NA
-      #new_road$CONDUCTIVITY  <- 0
+      new_road$CONDUCTIVITY  <- NA
       new_road$SCORE         <- 0
       new_road$STATE         <- 4
       verbose("Done\n") ; cat("\n")
@@ -226,7 +227,6 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   }
 
   # We now have an accurate road (hopefully). We can make measurement on it
-  param$extraction$road_buffer <- 30
   segment_metrics <- road_measure(las, new_road, param)
   segment_metrics <- sf::st_as_sf(segment_metrics, coords = c("xroad", "yroad"), crs = sf::st_crs(las))
 
@@ -265,6 +265,23 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
+
+  # For a redrawn road, check if the ends of the
+  # new road are suspiciously close to the edge of the caps
+  if (attribute_table[["STATE"]] %in% c(1,2))
+  {
+    start_ori <- lwgeom::st_startpoint(road)
+    start_new <- lwgeom::st_startpoint(new_road)
+    start_diff <- as.numeric(sf::st_distance(start_ori, start_new))
+
+    end_ori <- lwgeom::st_endpoint(road)
+    end_new <- lwgeom::st_endpoint(new_road)
+    end_diff <- as.numeric(sf::st_distance(end_ori, end_new))
+
+    if (max(start_diff, end_diff) > param[["extraction"]][["road_buffer"]] * 0.8) {
+      warning("Road within 20% of the edge of an end cap radius at one or both ends. The computed road may have taken a shortcut through the woods.", call. = FALSE)
+    }
+  }
 
   verbose("Done\n") ; cat("\n")
 

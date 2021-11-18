@@ -109,7 +109,7 @@ get_state =  function(score)
 
 road_relocate = function(las, road, dtm, water, param)
 {
-  poly2 <- sf::st_buffer(road, param$extraction$road_buffer/2)
+  poly2 <- sf::st_buffer(road, param$extraction$road_buffer)
 
   dtm <- raster::crop(dtm, poly2)
   dtm <- raster::mask(dtm, poly2)
@@ -199,7 +199,7 @@ road_measure = function(las, road, param)
     if (angle < 0) angle <- angle + pi
     center <- (p1+p2)/2
     height <- sqrt(sum((p1-p2)^2))
-    width <- param[["extraction"]][["road_buffer"]]
+    width <- param[["extraction"]][["road_max_width"]]
     xmin <- center[1] - width/2
     xmax <- center[1] + width/2
     ymin <- center[2] - height/2

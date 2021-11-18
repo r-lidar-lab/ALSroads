@@ -2,7 +2,8 @@
 # into small sections and computing profiles
 extraction = list(
   road_max_len = 2000,
-  road_buffer = 160,
+  road_max_width = 30,
+  road_buffer = 80,
   section_length = 10,
   profile_resolution = 0.5
 )
@@ -46,7 +47,8 @@ param = list(
 #'
 #' - **road_max_len**: maximum size of a processed road. If longer than that it will be split in
 #' chunks of equal sizes such as no one is more than this size.
-#' - **road_buffer**: width of the point-cloud extracted around the road
+#' - **road_max_width**: maximum width of a road for metrics measurements
+#' - **road_buffer**: width of a buffer around the road for point-cloud extraction
 #' - **section_length**: length of sections of road for metrics measurements
 #' - **profile_resolution**: resolution of the profiles and DTMs for metrics measurements
 #'
