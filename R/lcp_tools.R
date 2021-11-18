@@ -81,9 +81,13 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   if (utils::packageVersion("lidR") < "4.0.0")
   {
-    lay  <- lidR:::rOverlay(nlas, dtm, buffer = 0)
-    imax <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
-    imin <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
+    lay   <- lidR:::rOverlay(nlas, dtm, buffer = 0)
+    i_max <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
+    i_min <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
+    imin <- lay
+    imax <- lay
+    imin[] <- i_min
+    imax[] <- i_max
   }
   else
   {
@@ -264,7 +268,8 @@ mask_conductivity <- function(conductivity, road, param)
     xy <- as.data.frame(xy)
     xy$z <- 0
     names(xy) <- c("X", "Y", "Z")
-    xy <- lidR::LAS(xy, lidR::LASheader(xy), crs = sf::st_crs(caps$caps))
+    xy <- lidR::LAS(xy, lidR::LASheader(xy))
+    lidR::projection(xy) <- sf::st_crs(caps$caps)
 
     if (utils::packageVersion("lidR") < "4.0.0")
     {
