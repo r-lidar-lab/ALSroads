@@ -74,12 +74,11 @@ st_snap_lines = function(roads, tolerance = 8)
 #' @param roads  multiples lines (sf format). Corrected but unconnected roads.
 #' @param roads_ori  multiples lines (sf format). Original non-corrected but connected roads.
 #' @param field  character. Unique identifier field in both road datasets.
-#' @param weight  numeric (between 0 and 1). Weight that the coordinates of prior connections should have.
-#' @param tolerance  numeric. Maximal distance allowed between the orignal position of road endings and and the new computed one.
+#' @param tolerance  numeric. For a specific jonction, maximal distance allowed between the new computed individual jonctions and the mean jonction.
 #'
 #' @return The same object provided in input but with corrected ending such as roads are connected.
 #' @export
-st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
+st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
 {
   IDs1 <- sort(unique(roads[[field]]))
   IDs2 <- sort(unique(roads_ori[[field]]))
@@ -92,7 +91,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
   roads <- dplyr::arrange(roads, field)
   roads_ori <- dplyr::arrange(roads_ori, field)
   
-  prepare_data <- function(roads, end)
+  prepare_data <- function(roads, end = FALSE)
   {
     if (end) {
       get_end <- lwgeom::st_endpoint
@@ -114,15 +113,30 @@ st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
   
   # For the corrected roads, extraction of end points coordinates
   # and association with a unique identifier
+  # Note that in "tb_ends_roads", entries of tb_endpoint must be
+  # before those of tb_startpoint because this order is assumed
+  # when updating the "limit" column elsewhere in the code
   tb_endpoint <- prepare_data(roads, TRUE)
   tb_startpoint <- prepare_data(roads, FALSE)
-  tb_ends_roads <- rbind(tb_endpoint, tb_startpoint)
+  
+  ls_angles180 <- lapply(sf::st_geometry(roads_ori), st_angles180)
+  angles180_tail_end <- c(sapply(ls_angles180, tail, 1),
+                          sapply(ls_angles180, head, 1))
+  
+  tb_ends_roads <- rbind(tb_endpoint, tb_startpoint) |>
+    dplyr::mutate(angle180 = angles180_tail_end)
   
   # For the non-corrected roads, extraction of end points coordinates
   # and association with a unique identifier
   tb_endpoint <- prepare_data(roads_ori, TRUE)
   tb_startpoint <- prepare_data(roads_ori, FALSE)
-  tb_ends_ori <- rbind(tb_endpoint, tb_startpoint)
+  
+  ls_angles90 <- lapply(sf::st_geometry(roads_ori), st_angles90)
+  angles90_tail_end <- c(sapply(ls_angles90, tail, 1),
+                         sapply(ls_angles90, head, 1))
+  
+  tb_ends_ori <- rbind(tb_endpoint, tb_startpoint) |>
+    dplyr::mutate(angle90 = angles90_tail_end)
   
   # List of distinct connected nodes in the
   # non-corrected road dataset
@@ -131,45 +145,247 @@ st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
   {
     dplyr::filter(tb_ends_ori, X == tb_nodes[ii,][["X"]] & Y == tb_nodes[ii,][["Y"]])[["id"]]
   })
+
   
-  
-  for (ii in 1:nrow(tb_nodes))
+  for (ii in seq_along(ls_group_ids))
   {
     group_ids <- ls_group_ids[[ii]]
+    tb_group <- dplyr::filter(tb_ends_ori, id %in% group_ids)
+    been_corrected <- any(roads[tb_group[["pos"]],][["STATE"]] %in% c(1,2))
     
-    if (length(group_ids) > 1) 
-    {
-      # Coordinates of the original road node
-      x_ori <- tb_nodes[ii,][["X"]]
-      y_ori <- tb_nodes[ii,][["Y"]]
+    # Will only try snapping if more than one segment is in the group
+    # as well as if at least one of the segments in the group has been corrected
+    if (length(group_ids) > 1 & been_corrected)
+    { 
+      # Find the two segments that are the most
+      # likely to be the extension of each other
+      # Those two are marked out as the "main bridge"
+      # The best fit is based on (on order):
+      #  - the angles formed between the segments (the flatter the better)
+      #  - the state (corrected roads are favored)
+      #  - the score (best overal score is favored)
+      m_row <- combn(1:nrow(tb_group), 2)
+      m_angle <- combn(tb_group[["angle90"]], 2)
+      m_score <- combn(roads[tb_group[["pos"]],][["SCORE"]], 2)
+      states <- roads[tb_group[["pos"]],][["STATE"]]
+      m_state <- combn(ifelse(states %in% c(1,2), states, 3), 2)
+      
+      tb_similarity <- dplyr::tibble(
+        pairs = 1:ncol(m_row),
+        comb_angle = abs(abs(m_angle[1,] - m_angle[2,]) - 90),
+        comb_state = m_state[1,] + m_state[2,],
+        comb_score = m_score[1,] + m_score[2,]) |>
+        dplyr::mutate(comb_angle = ifelse(comb_angle > 80, 80, comb_angle)) |>
+        dplyr::mutate(comb_state = ifelse(comb_state %in% c(1,2), comb_state, 3)) |>
+        dplyr::arrange(dplyr::desc(comb_angle), comb_state, dplyr::desc(comb_score))
+      
+      idx_best <- tb_similarity[1,][["pairs"]]
+      bridge_ids <- tb_group[m_row[,idx_best],][["id"]]
+      
       
       # Mean coordinates of the corrected road node
-      tb_node_cor <- dplyr::filter(tb_ends_roads, id %in% group_ids)
-      x_cor <- mean(tb_node_cor[["X"]])
-      y_cor <- mean(tb_node_cor[["Y"]])
+      # for the main bridge
+      tb_node_bridge <- dplyr::filter(tb_ends_roads, id %in% bridge_ids)
+      x_bridge <- mean(tb_node_bridge[["X"]])
+      y_bridge <- mean(tb_node_bridge[["Y"]])
       
-      # New computed node coordinates
-      x_new <- x_cor * (1 - weight) + x_ori * weight
-      y_new <- y_cor * (1 - weight) + y_ori * weight
       
-      # Check for tolerance
-      max_dist <- max(sqrt((tb_node_cor[["X"]] - x_new)^2 + (tb_node_cor[["Y"]] - y_new)^2))
-      if (max_dist > tolerance)
+      # If there is only two segments, there is no need
+      # to try finding a better jonction point with a
+      # non-existent third or fourth segment...
+      if (length(group_ids) == 2)
       {
-        pos <- tb_node_cor[["pos"]]
-        values_field <- glue::glue_collapse(roads[pos,][[field]], ", ")
-        warning(glue::glue("Roads with {field} == {values_field} could not be snapped together due to the tolerance used ({max_dist} > {tolerance} {dist_unit}). Original roads returned."), call. = FALSE)
-      } 
-      else 
-      {
-        # Update coordinates
-        for (j in seq_along(group_ids))
+        for (j in 1:2)
         {
-          pos <- tb_node_cor[j,][["pos"]]
-          n <- tb_node_cor[j,][["limit"]]
+          lim <- tb_node_bridge[j,][["limit"]]
+          pos <- tb_node_bridge[j,][["pos"]]
           
-          sf::st_geometry(roads[pos,])[[1]][n, 1] <- x_new
-          sf::st_geometry(roads[pos,])[[1]][n, 2] <- y_new
+          sf::st_geometry(roads[pos,])[[1]][lim, 1] <- x_bridge
+          sf::st_geometry(roads[pos,])[[1]][lim, 2] <- y_bridge
+        }
+      } else {
+        # Merge the two segments forming the main bridge
+        # This will allow for an easier split when the 
+        # exact position of the jonction will be found
+        lim_1 <- tb_node_bridge[1,][["limit"]]
+        lim_2 <- tb_node_bridge[2,][["limit"]]
+        pos_1 <- tb_node_bridge[1,][["pos"]]
+        pos_2 <- tb_node_bridge[2,][["pos"]]
+        coord_1 <- sf::st_coordinates(roads[pos_1,])[,-3]
+        coord_2 <- sf::st_coordinates(roads[pos_2,])[,-3]
+        rev_1 <- FALSE
+        rev_2 <- FALSE
+        
+        if (lim_1 == 1)
+        {
+          rev_1 <- TRUE
+          coord_1[,1] <- rev(coord_1[,1])
+          coord_1[,2] <- rev(coord_1[,2])
+          if (lim_2 != 1)
+          {
+            rev_2 <- TRUE
+            coord_1[,1] <- rev(coord_1[,1])
+            coord_1[,2] <- rev(coord_1[,2])
+            coord_2[,1] <- rev(coord_2[,1])
+            coord_2[,2] <- rev(coord_2[,2])
+          }
+        } else {
+          if (lim_2 != 1)
+          {
+            rev_2 <- TRUE
+            coord_2[,1] <- rev(coord_2[,1])
+            coord_2[,2] <- rev(coord_2[,2])
+          }
+        }
+        
+        n <- nrow(coord_1)
+        coords <- rbind(coord_1[-n, ],
+                        c(x_bridge, y_bridge),
+                        coord_2[-1,])
+        bridge <- sf::st_sfc(sf::st_linestring(coords),
+                             crs = sf::st_crs(roads))
+        
+        
+        # Find intersection points between the remaining
+        # segments and the bridge. The intersection point
+        # is given as the distance on the path between
+        # the begining of the bridge and intersection point
+        remain_ids <- group_ids[!(group_ids %in% bridge_ids)]
+        tb_node_remain <- dplyr::filter(tb_ends_roads, id %in% {{remain_ids}})
+        dist_bridge <- sapply(seq_along(remain_ids),
+                              bridge_intersection,
+                              roads,
+                              sf::st_geometry(bridge),
+                              tb_node_remain)
+        
+        # Compute the final jonction point on the bridge
+        valid_intersection <- !sapply(dist_bridge, is.na)
+        if (any(valid_intersection))
+        {
+          dist_jonction <- mean(dist_bridge[valid_intersection])
+          
+          # Check if all intersection append within the tolerance
+          # value of the mean. If not, edit none of the roads
+          # Certainly not the better way to handle this
+          if (max(abs(dist_bridge[valid_intersection] - dist_jonction)) > tolerance)
+          {
+            warning(glue::glue("Some roads crosses bridge too far from each other (> {tolerance} {dist_unit}). Roads at this junction won't be snapped."), call.=FALSE)
+          } else {
+            coords_bridge <- sf::st_coordinates(bridge)
+            n <- nrow(coords_bridge)
+            
+            dist_along_bridge <- data.frame(dist=2:n, cumsum=2:n)
+            dist_along_bridge[,1] <- sqrt((coords_bridge[-1,2] - coords_bridge[-n,2])^2 +
+                                            (coords_bridge[-1,1] - coords_bridge[-n,1])^2)
+            dist_along_bridge[,2] <- cumsum(dist_along_bridge[,1])
+            
+            idx <- which(dist_along_bridge[,2] >= dist_jonction)[1]
+            
+            theta <- atan2(coords_bridge[idx+1,2] - coords_bridge[idx,2],
+                           coords_bridge[idx+1,1] - coords_bridge[idx,1])
+            
+            hypo <- dist_jonction - dist_along_bridge[idx,2] + dist_along_bridge[idx,1]
+            
+            x_jonction_tmp <- coords_bridge[idx,1] + hypo * cos(theta)
+            y_jonction_tmp <- coords_bridge[idx,2] + hypo * sin(theta)
+            
+            # Make a small perpendicular linestring for
+            # the splitting operation as the point itself may
+            # not be perfectly aligned (due to floating point precision?)
+            x1_blade <- x_jonction_tmp + 0.1 * cos(theta+pi/2)
+            y1_blade <- y_jonction_tmp + 0.1 * sin(theta+pi/2)
+            x2_blade <- x_jonction_tmp - 0.1 * cos(theta+pi/2)
+            y2_blade <- y_jonction_tmp - 0.1 * sin(theta+pi/2)
+            blade <- sf::st_linestring(matrix(c(x1_blade, x2_blade, y1_blade, y2_blade), 2))
+            
+            # Split bridge at jonction to reconstruct the (updated)
+            # two original segments composing it
+            bridge_collection <- lwgeom::st_split(bridge, blade)
+            bridge_features <- sf::st_collection_extract(bridge_collection, "LINESTRING")
+            coords_jonction <- sf::st_coordinates(bridge_features[2])[1,-3]
+            
+            if (rev_1)
+            {
+              coord <- sf::st_coordinates(bridge_features[1])
+              coord[,1] <- rev(coord[,1])
+              coord[,2] <- rev(coord[,2])
+              bridge_features[1][[1]] <- sf::st_linestring(coord[,1:2])
+            }
+            if (rev_2)
+            {
+              coord <- sf::st_coordinates(bridge_features[2])
+              coord[,1] <- rev(coord[,1])
+              coord[,2] <- rev(coord[,2])
+              bridge_features[2][[1]] <- sf::st_linestring(coord[,1:2])
+            }
+            
+            sf::st_geometry(roads[pos_1,]) <- bridge_features[1]
+            sf::st_geometry(roads[pos_2,]) <- bridge_features[2]
+            
+            
+            # Update "limit" values in tb_ends_roads table
+            # as the splitting operation might change the number of
+            # vertices in the geometry
+            tb_ends_roads[pos_1,"limit"] <- nrow(bridge_features[1][[1]])
+            tb_ends_roads[pos_2,"limit"] <- nrow(bridge_features[2][[1]])
+            
+            
+            # Update coordinates of remaining segments
+            # by splitting in order to avoid potential
+            # overlapping segment if it was already crossing
+            # the bridge before elongation
+            for (j in which(valid_intersection))
+            {
+              pos <- tb_node_remain[j,][["pos"]]
+              n <- tb_node_remain[j,][["limit"]]
+              angle <- tb_node_remain[j,][["angle180"]]*pi/180
+              
+              road_copy <- roads[pos,] # Copie superflue
+              coords_road_origine <- sf::st_coordinates(road_copy)
+              
+              x_remain <- sf::st_geometry(road_copy)[[1]][n, 1] + 999999 * cos(angle)
+              y_remain <- sf::st_geometry(road_copy)[[1]][n, 2] + 999999 * sin(angle)
+              
+              sf::st_geometry(road_copy)[[1]][n, 1] <- x_remain
+              sf::st_geometry(road_copy)[[1]][n, 2] <- y_remain
+              
+              splitted_road <- lwgeom::st_split(road_copy, bridge)
+              road_features <- sf::st_collection_extract(splitted_road, "LINESTRING")
+              n_origine <- if(n == 1) nrow(coords_road_origine) else 1
+              coords_match <- coords_road_origine[n_origine,-3]
+              
+              ii <- 0
+              matching <- FALSE
+              while(!matching)
+              {
+                ii <- ii + 1
+                coords_feature <- sf::st_coordinates(road_features[ii,])
+                n_coords <- nrow(coords_feature)
+                
+                match_start <- all(coords_feature[1,-3] == coords_match)
+                match_end   <- all(coords_feature[n_coords,-3] == coords_match)
+                
+                if(match_start) n_edit <- n_coords
+                if(match_end)   n_edit <- 1
+                
+                matching <- match_start | match_end
+              }
+              
+              # Edit the coordinates at splitting point
+              # to make sure that it is exactly the same as
+              # coords_jonction. May not be necessary...
+              sf::st_geometry(road_features[ii,])[[1]][n_edit, 1] <- coords_jonction[1]
+              sf::st_geometry(road_features[ii,])[[1]][n_edit, 2] <- coords_jonction[2]
+              updated_geometry <- sf::st_geometry(road_features[ii,])
+              
+              sf::st_geometry(roads[pos,]) <- updated_geometry
+              
+              # Update "limit" values in tb_ends_roads table
+              # as the splitting operation might change the number of
+              # vertices in the geometry
+              tb_ends_roads[pos,"limit"] <- nrow(updated_geometry[[1]])
+            }
+          }
         }
       }
     }
@@ -177,6 +393,80 @@ st_snap_lines2 <- function(roads, roads_ori, field, weight = 0, tolerance = Inf)
   
   return(roads)
 }
+
+
+bridge_intersection <- function(j, roads, bridge, tb_node_remain)
+{
+  pos <- tb_node_remain[j,][["pos"]]
+  n <- tb_node_remain[j,][["limit"]]
+  angle <- tb_node_remain[j,][["angle180"]]*pi/180
+  
+  road_copy <- roads[pos,] # Copie peut-être pas nécessaire
+  
+  x_remain <- sf::st_geometry(road_copy)[[1]][n, 1] + 999999999 * cos(angle)
+  y_remain <- sf::st_geometry(road_copy)[[1]][n, 2] + 999999999 * sin(angle)
+  
+  sf::st_geometry(road_copy)[[1]][n, 1] <- x_remain
+  sf::st_geometry(road_copy)[[1]][n, 2] <- y_remain
+  
+  pt_intersect <- sf::st_intersection(bridge, sf::st_geometry(road_copy))
+  if (length(pt_intersect))
+  {
+    # Check if the road crosses bridge more than one time (if so, will be MULTIPOINT)
+    if (sf::st_geometry_type(pt_intersect) == "POINT")
+    {
+      dist_bridge <- rgeos::gProject(sf::as_Spatial(bridge), sf::as_Spatial(pt_intersect))
+    }
+    else
+    {
+      # Je pourrais calculer la distance entre chaque point et la jonction du pont et ne conserver que celui qui est le plus près
+      warning(glue::glue("{tb_node_remain[j,][['id']]} crosses bridge multiple times. This end of the road won't be snapped: {sf::st_geometry(roads[pos,])[[1]][n,1]} {sf::st_geometry(roads[pos,])[[1]][n,2]}"), call.=FALSE)
+      dist_bridge <- NA
+    }
+  }
+  else
+  {
+    warning(glue::glue("{tb_node_remain[j,][['id']]} never crosses bridge. This end of the road won't be snapped: {sf::st_geometry(roads[pos,])[[1]][n,1]} {sf::st_geometry(roads[pos,])[[1]][n,2]}"), call.=FALSE)
+    dist_bridge <- NA
+  }
+  return(dist_bridge)
+}
+
+
+st_angles90 <- function(line)
+{
+  M <- sf::st_coordinates(line)
+  n = nrow(M)
+  
+  angles <- sapply(c(2, n), function(i) {
+    Ax = M[i-1,1]
+    Ay = M[i-1,2]
+    Bx = M[i,1]
+    By = M[i,2]
+    atan((Bx-Ax)/(By-Ay))*180/pi
+  })
+  
+  return(unname(angles))
+}
+
+
+st_angles180 <- function(line)
+{
+  M <- sf::st_coordinates(line)
+  n = nrow(M)
+  
+  angles <- sapply(c(2, n), function(i) {
+    if (i == 2) {j <- 1} else {j <- -1 ; i <- n-1}
+    Ax = M[i-j,1]
+    Ay = M[i-j,2]
+    Bx = M[i,1]
+    By = M[i,2]
+    atan2(Ay-By, Ax-Bx)*180/pi
+  })
+  
+  return(unname(angles))
+}
+
 
 sinuosity <- function(x)
 {
