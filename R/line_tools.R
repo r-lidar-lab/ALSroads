@@ -119,7 +119,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
   tb_endpoint <- prepare_data(roads, TRUE)
   tb_startpoint <- prepare_data(roads, FALSE)
   
-  ls_angles180 <- lapply(sf::st_geometry(roads_ori), st_angles180)
+  ls_angles180 <- lapply(sf::st_geometry(roads), st_angles180)
   angles180_tail_end <- c(sapply(ls_angles180, tail, 1),
                           sapply(ls_angles180, head, 1))
   
@@ -422,6 +422,7 @@ bridge_intersection <- function(j, roads, bridge, bridge_jonction, tb_node_remai
     sp_bridge <- sf::as_Spatial(bridge)
     sp_intersect <- sf::as_Spatial(sf::st_cast(pts_intersect, "POINT"))
     
+    dist_bridge <- rep(NA, seq_along(sp_intersect))
     for (k in seq_along(sp_intersect))
     {
       dist_bridge[k] <- rgeos::gProject(sp_bridge, sp_intersect[k])
