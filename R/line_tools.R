@@ -421,8 +421,8 @@ bridge_intersection <- function(j, roads, bridge, bridge_jonction, tb_node_remai
     # Only the closest crossing is kept
     sp_bridge <- sf::as_Spatial(bridge)
     sp_intersect <- sf::as_Spatial(sf::st_cast(pts_intersect, "POINT"))
-    
-    dist_bridge <- rep(NA, seq_along(sp_intersect))
+
+    dist_bridge <- NA
     for (k in seq_along(sp_intersect))
     {
       dist_bridge[k] <- rgeos::gProject(sp_bridge, sp_intersect[k])
