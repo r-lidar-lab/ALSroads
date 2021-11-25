@@ -188,6 +188,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       tb_node_bridge <- dplyr::filter(tb_ends_roads, id %in% bridge_ids)
       x_bridge <- mean(tb_node_bridge[["X"]])
       y_bridge <- mean(tb_node_bridge[["Y"]])
+      bridge_jonction <- sf::st_sfc(sf::st_point(c(x_bridge, y_bridge)), crs = sf::st_crs(roads))
       
       
       # If there is only two segments, there is no need
@@ -206,7 +207,10 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       } else {
         # Merge the two segments forming the main bridge
         # This will allow for an easier split when the 
-        # exact position of the jonction will be found
+        # exact position of the jonction will be found.
+        # Reversing direction of one of the two segments
+        # might be needed in order obtain a continuous
+        # "flow" of the vertices.
         lim_1 <- tb_node_bridge[1,][["limit"]]
         lim_2 <- tb_node_bridge[2,][["limit"]]
         pos_1 <- tb_node_bridge[1,][["pos"]]
@@ -256,6 +260,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
                               bridge_intersection,
                               roads,
                               sf::st_geometry(bridge),
+                              bridge_jonction,
                               tb_node_remain)
         
         # Compute the final jonction point on the bridge
@@ -264,7 +269,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
         {
           dist_jonction <- mean(dist_bridge[valid_intersection])
           
-          # Check if all intersection append within the tolerance
+          # Check if all intersections occur within the tolerance
           # value of the mean. If not, edit none of the roads
           # Certainly not the better way to handle this
           if (max(abs(dist_bridge[valid_intersection] - dist_jonction)) > tolerance)
@@ -395,7 +400,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
 }
 
 
-bridge_intersection <- function(j, roads, bridge, tb_node_remain)
+bridge_intersection <- function(j, roads, bridge, bridge_jonction, tb_node_remain)
 {
   pos <- tb_node_remain[j,][["pos"]]
   n <- tb_node_remain[j,][["limit"]]
@@ -409,20 +414,20 @@ bridge_intersection <- function(j, roads, bridge, tb_node_remain)
   sf::st_geometry(road_copy)[[1]][n, 1] <- x_remain
   sf::st_geometry(road_copy)[[1]][n, 2] <- y_remain
   
-  pt_intersect <- sf::st_intersection(bridge, sf::st_geometry(road_copy))
-  if (length(pt_intersect))
+  pts_intersect <- sf::st_intersection(bridge, sf::st_geometry(road_copy))
+  if (length(pts_intersect))
   {
-    # Check if the road crosses bridge more than one time (if so, will be MULTIPOINT)
-    if (sf::st_geometry_type(pt_intersect) == "POINT")
+    # Compute the distance between each crossing and the bridge jonction
+    # Only the closest crossing is kept
+    sp_bridge <- sf::as_Spatial(bridge)
+    sp_intersect <- sf::as_Spatial(sf::st_cast(pts_intersect, "POINT"))
+    
+    for (k in seq_along(sp_intersect))
     {
-      dist_bridge <- rgeos::gProject(sf::as_Spatial(bridge), sf::as_Spatial(pt_intersect))
+      dist_bridge[k] <- rgeos::gProject(sp_bridge, sp_intersect[k])
     }
-    else
-    {
-      # Je pourrais calculer la distance entre chaque point et la jonction du pont et ne conserver que celui qui est le plus près
-      warning(glue::glue("{tb_node_remain[j,][['id']]} crosses bridge multiple times. This end of the road won't be snapped: {sf::st_geometry(roads[pos,])[[1]][n,1]} {sf::st_geometry(roads[pos,])[[1]][n,2]}"), call.=FALSE)
-      dist_bridge <- NA
-    }
+    dist_jonction <- rgeos::gProject(sp_bridge, sf::as_Spatial(bridge_jonction))
+    dist_bridge <- dist_bridge[which.min(abs(dist_bridge - dist_jonction))]
   }
   else
   {
