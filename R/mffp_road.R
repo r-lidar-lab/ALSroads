@@ -177,7 +177,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     new_road$CONDUCTIVITY  <- mean(res$CONDUCTIVITY)
     new_road$SCORE         <- road_score(new_road, param)
     new_road$STATE         <- get_state(new_road$SCORE)
-    if (new_road$STATE < 3) sf::st_geometry(new_road) <- geom
+    if (!is.na(new_road$STATE) && new_road$STATE < 3) sf::st_geometry(new_road) <- geom
     verbose("Done\n") ; cat("\n")
     return(new_road)
   }
