@@ -25,7 +25,7 @@ extract_road = function(las, road, param)
   {
     verbose("Extracting the point cloud...\n")
     width <- param[["extraction"]][["road_buffer"]]
-    las <- clip_longline(las, road, (width + 5)/2)
+    las <- clip_longline(las, road, width + 5)
   }
 
   # Create a spatial index for fast consecutive range queries
