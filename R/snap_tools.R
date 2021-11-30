@@ -263,7 +263,8 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
     # by splitting in order to avoid potential
     # overlapping segment if it was already crossing
     # the bridge before elongation
-    for (j in which(valid_intersection))
+    idx_valid_intersection <- which(valid_intersection)
+    for (j in idx_valid_intersection)
     {
       pos <- tb_node_remain[j,][["pos"]]
       n <- tb_node_remain[j,][["limit"]]
@@ -272,40 +273,44 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       road_ori <- roads[pos,] # Copie superflue?
       coords_road_ori <- sf::st_coordinates(road_ori)[,-3]
       
-      x_remain <- sf::st_geometry(road_ori)[[1]][n, 1] + 999999 * cos(heading)
-      y_remain <- sf::st_geometry(road_ori)[[1]][n, 2] + 999999 * sin(heading)
+      x_elongated <- coords_road_ori[n, 1] + 999999 * cos(heading)
+      y_elongated <- coords_road_ori[n, 2] + 999999 * sin(heading)
       
-      sf::st_geometry(road_ori)[[1]][n, 1] <- x_remain
-      sf::st_geometry(road_ori)[[1]][n, 2] <- y_remain
+      sf::st_geometry(road_ori)[[1]][n, 1] <- x_elongated
+      sf::st_geometry(road_ori)[[1]][n, 2] <- y_elongated
       
       splitted_road <- lwgeom::st_split(road_ori, bridge)
       road_features <- sf::st_collection_extract(splitted_road, "LINESTRING")
       
       
-      # Extract vertices coordinates corresponding
-      # to the bulk of the original segment.
-      # This is done by checking which feature has
-      # an end matching the coordinates of the end
-      # on the original segment which wasn't part
-      # of the orginal junction
-      n_opposite <- if(n == 1) nrow(coords_road_ori) else n
-      coords_opposite <- coords_road_ori[n_opposite,]
-      
+      # Find vertices coordinates corresponding
+      # to the bulk of the original segment which
+      # aren't those between the elongated vertex
+      # and the junction vertex with the bridge
       coords_splitted <- sf::st_coordinates(road_features)
+      idx_duplicated <- which((diff(coords_splitted[,"X"]) == 0) & (diff(coords_splitted[,"Y"]) == 0))
+      coords_splitted <- coords_splitted[-idx_duplicated,]
       
-      idx_match <- (coords_splitted[,-3] == coords_opposite) |>
-        apply(1, all) |>
-        which()
+      x_match_elong <- coords_splitted[,"X"] == x_elongated
+      y_match_elong <- coords_splitted[,"Y"] == y_elongated
+      idx_match_elong <- which(x_match_elong & y_match_elong)
       
-      nLinestring <- coords_splitted[idx_match, 3]
-      coords_keep <- coords_splitted[coords_splitted[,3] == nLinestring, -3]
+      # Some wiggle room must be added due to slight imprecision
+      junction_point <- dist_bridge[idx_valid_intersection[j]] |>
+        st_point_on_path(bridge)
+      x_match_junc <- (coords_splitted[,"X"] >= (junction_point["X"]-0.01)) &
+                      (coords_splitted[,"X"] <= (junction_point["X"]+0.01))
+      y_match_junc <- (coords_splitted[,"Y"] >= (junction_point["Y"]-0.01)) &
+                      (coords_splitted[,"Y"] <= (junction_point["Y"]+0.01))
+      idx_match_junc <- which(x_match_junc & y_match_junc)
       
+      # Remove all coordinates between the elongated vertex
+      # and the junction vertex
+      coords_keep <- coords_splitted[-(idx_match_junc:idx_match_elong),-3]
       
-      # Edit the coordinates at splitting point
-      # to make sure that it is exactly the same as
-      # coords_junction. May not be necessary...
-      coords_keep[n,1:2] <- coords_junction
-      
+      # Edit the coordinates at (mean) splitting point
+      idx_junction <- if(n != 1) nrow(coords_keep) else 1
+      coords_keep[idx_junction,] <- coords_junction
       
       # Update geometry of the corrected segment
       sf::st_geometry(roads[pos,]) <- coords_keep |>
