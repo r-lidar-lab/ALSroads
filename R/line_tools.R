@@ -16,6 +16,96 @@ st_ends_heading <- function(line)
 }
 
 
+extend_linestring <- function(linestring, n, heading, distance)
+{
+  linestring[n, 1:2] <- linestring[n, 1:2] + distance * c(cos(heading), sin(heading))
+  return(linestring)
+}
+
+
+#' Get point from distance on a line
+#'
+#' This is essentially the reverse of rgeos::gProject(). It must be noted
+#' that due floating point precision issue, the point returned won't be
+#' exactly on the line and thus won't split it.
+#'
+#' @param distance  distance on the \code{line} at which the coordinates will be retreived.
+#' @param line  line (\code{sfc} format)
+#' @param from_end  logical; (\code{FALSE} by default); if \code{TRUE} start measuring from the end
+#' of \code{line} instead of from the beginning.
+#'
+#' @return point (as \code{sfc_POINT}) as close as possible of being on the \code{line} at the
+#' given distance
+#' @noRd
+st_point_on_line <- function(distance, line, from_end = FALSE)
+{
+  if (distance > as.numeric(sf::st_length(line))) stop("\"distance\" must be smaller than the total length of \"line\"")
+
+  coords <- sf::st_coordinates(line)
+
+  if (from_end) coords <- apply(coords, 2, rev)
+  
+  dist_lagged <- sqrt(diff(coords[,1])^2 + diff(coords[,2])^2)
+  dist_along_line <- data.frame(dist = dist_lagged,
+                                cumsum = cumsum(dist_lagged))
+  
+  idx <- which(dist_along_line[,2] >= distance)[1]
+  
+  theta <- atan2(coords[idx+1,2] - coords[idx,2],
+                 coords[idx+1,1] - coords[idx,1])
+  hypo <- distance - dist_along_line[idx,2] + dist_along_line[idx,1]
+  
+  x_junction <- coords[idx,1] + hypo * cos(theta)
+  y_junction <- coords[idx,2] + hypo * sin(theta)
+
+  pt_junction <- c(x_junction, y_junction) |>
+    sf::st_point() |>
+    sf::st_sfc(crs = sf::st_crs(line))
+
+  return(pt_junction)
+}
+
+
+#' Split line at a given point
+#'
+#' Split line at a specified point. The point must be
+#' within the tolerance from the line for a split to occur.
+#'
+#' @param split_point  point (\code{sfc} format) at which the \code{line} will be split.
+#' @param line  line (\code{sfc} format)
+#' @param tolerance  numeric; maximum distance allowed between the point and the line
+#' for a split to occur
+#'
+#' @return geometries (as \code{sfc_LINESTRING}) resulting from the split.
+#' @noRd
+st_split_at_point <- function(split_point, line, tolerance = 0.01)
+{
+  # Make a small perpendicular linestring for the splitting
+  # operation as the split point provided won't split if
+  # it isn't exactly on one of the line's vertices
+  blade <- sf::st_nearest_points(split_point, line)
+
+  if (as.numeric(sf::st_length(blade)) > tolerance) stop("\"split_point\" too far from \"line\" to perform split")
+
+  # Sharpen blade (by slightly extending it)!
+  coords <- st_coordinates(blade)
+  theta <- atan2(diff(coords[,2]), diff(coords[,1]))
+
+  xmax <- max(coords[,"X"]) + abs(0.01 * cos(theta))
+  ymax <- max(coords[,"Y"]) + abs(0.01 * sin(theta))
+  xmin <- min(coords[,"X"]) - abs(0.01 * cos(theta))
+  ymin <- min(coords[,"Y"]) - abs(0.01 * sin(theta))
+  
+  # Split line and extract the two parts
+  split_line <- rbind(c(xmax, ymax), c(xmin, ymin)) |>
+    sf::st_linestring() |>
+    lwgeom::st_split(x = line) |>
+    sf::st_collection_extract("LINESTRING")
+  
+  return(split_line)
+}
+
+
 sinuosity <- function(x)
 {
   UseMethod("sinuosity", x)
