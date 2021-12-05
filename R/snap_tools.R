@@ -509,3 +509,46 @@ st_make_bridge <- function(roads, tb_node_bridge)
               junction = pt_junction,
               reversed = c(rev_1, rev_2)))
 }
+
+
+#' Check for potential road junctions
+#'
+#' Check if some road endings are closed enough to be considered as a junction. Road endings that are actually
+#' touching are not considered. Fixing can be done by running \link{st_snap_lines} with the same \code{tolerance}
+#' value on the same road network.
+#'
+#' @param roads  multiples lines (\code{sf} format)
+#' @param tolerance numeric (distance unit). Tolerance value used to check if some road endings should have been snapped together.
+#'
+#' @return Point object (as \code{sfc} format) corresponding to the location of potentially missing junctions.
+#' @export
+st_check_junctions = function(roads, tolerance = 1)
+{
+  end   <- lwgeom::st_endpoint(roads)
+  start <- lwgeom::st_startpoint(roads)
+  ends  <- c(start, end)
+  
+  u <- sf::st_is_within_distance(ends, ends, tolerance)
+  u <- lapply(u, sort)
+  u <- Filter(function(x) { length(x) > 1}, u)
+  u <- unique(u)
+  u <- lapply(u, function(x) { ends[x] })
+  u <- lapply(u, function(x) { sf::st_sfc(sf::st_point(colMeans(sf::st_coordinates(x)))) })
+  u <- do.call(c, u)
+  
+  # No potential junctions found
+  if (is.null(u)) return(sf::st_sfc(crs = sf::st_crs(roads)))
+  
+  sf::st_crs(u) <- sf::st_crs(roads)
+  
+  distances <- sf::st_distance(u, ends) |>
+    as.numeric() |>
+    matrix(nrow = length(u), byrow = TRUE)
+  
+  actual_junc <- apply(distances == 0, 1, any)
+  potent_junc <- apply(distances <= tolerance, 1, any)
+  
+  pts_junctions <- u[xor(actual_junc, potent_junc)]
+  
+  return(pts_junctions)
+}
