@@ -1,6 +1,6 @@
 #' Get heading of both ends of a line
 #'
-#' Retreive heading of both ends of a line, pointing away from it.
+#' Retrieve heading of both ends of a line, pointing away from it.
 #'
 #' @param line  line (\code{sfc} or \code{sfg} format)
 #'
@@ -10,18 +10,18 @@
 st_ends_heading <- function(line)
 {
   M <- sf::st_coordinates(line)
-  n = nrow(M)
+  i <- c(2, nrow(M) - 1)
+  j <- c(1, -1)
   
-  headings <- sapply(c(2, n), function(i) {
-    if (i == 2) {j <- 1} else {j <- -1 ; i <- n-1}
+  headings <- mapply(i, j, FUN = function(i, j) {
     Ax = M[i-j,1]
     Ay = M[i-j,2]
     Bx = M[i,1]
     By = M[i,2]
-    atan2(Ay-By, Ax-Bx)*180/pi
+    unname(atan2(Ay-By, Ax-Bx))*180/pi
   })
   
-  return(unname(headings))
+  return(headings)
 }
 
 
@@ -43,22 +43,13 @@ st_extend_line <- function(line, distance, end = "BOTH")
   if (!(end %in% c("BOTH", "HEAD", "TAIL")) | length(end) != 1) stop("'end' must be 'BOTH', 'HEAD' or 'TAIL'")
 
   M <- sf::st_coordinates(line)[,-3]
-
-  ends <- c(1, nrow(M))
-  headings <- st_ends_heading(line)/180*pi
-  distances <- distance[1:2]
-
-  if (end == "HEAD") {
-    ends <- ends[1]
-    headings <- headings[1]
-    distances[2] <- distance[1]
-  } else if (end == "TAIL") {
-    ends <- ends[2]
-    headings <- headings[2]
-    distances[2] <- distance[1]
-  }
+  keep <- !(end == c("TAIL", "HEAD"))
   
-  M[ends, 1:2] <- M[ends, 1:2] + distances * c(cos(headings), sin(headings))
+  ends <- c(1, nrow(M))[keep]
+  headings <- st_ends_heading(line)[keep] / 180 * pi
+  distances <- if (length(distance) == 1) rep(distance, 2) else distance[1:2]
+  
+  M[ends, 1:2] <- M[ends, 1:2] + distances[keep] * c(cos(headings), sin(headings))
   newline <- sf::st_linestring(M)
 
   # If input is sfc_LINESTRING and not sfg_LINESTRING
