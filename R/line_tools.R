@@ -1,3 +1,12 @@
+#' Get heading of both ends of a line
+#'
+#' Retreive heading of both ends of a line, pointing away from it.
+#'
+#' @param line  line (\code{sfc} or \code{sfg} format)
+#'
+#' @return numeric of length 2 expressing respectively the head and tail heading in degrees
+#' (range [-180°, 180°] using \code{atan2()}.
+#' @noRd
 st_ends_heading <- function(line)
 {
   M <- sf::st_coordinates(line)
@@ -12,14 +21,50 @@ st_ends_heading <- function(line)
     atan2(Ay-By, Ax-Bx)*180/pi
   })
   
-  return(headings)
+  return(unname(headings))
 }
 
 
-extend_linestring <- function(linestring, n, heading, distance)
+#' Extend line by given distance
+#'
+#' Extend one or both ends of a line by a given distance.
+#' No new vertices are added, instead, the first/last is moved
+#' to its new location following the same heading as before.
+#'
+#' @param line  line (\code{sfc} or \code{sfg} format)
+#' @param distance  numeric; distance by which the line will be extended. In case of \code{end = "BOTH"},
+#' a vector of length 2 can be provided to extend respectively the head and tail end by different values.
+#' @param end  character; (\code{BOTH}, \code{HEAD} or \code{TAIL}; define which end will be extended.
+#'
+#' @return Same line as input but now extended.
+#' @noRd
+st_extend_line <- function(line, distance, end = "BOTH")
 {
-  linestring[n, 1:2] <- linestring[n, 1:2] + distance * c(cos(heading), sin(heading))
-  return(linestring)
+  if (!(end %in% c("BOTH", "HEAD", "TAIL")) | length(end) != 1) stop("'end' must be 'BOTH', 'HEAD' or 'TAIL'")
+
+  M <- sf::st_coordinates(line)[,-3]
+
+  ends <- c(1, nrow(M))
+  headings <- st_ends_heading(line)/180*pi
+  distances <- distance[1:2]
+
+  if (end == "HEAD") {
+    ends <- ends[1]
+    headings <- headings[1]
+    distances[2] <- distance[1]
+  } else if (end == "TAIL") {
+    ends <- ends[2]
+    headings <- headings[2]
+    distances[2] <- distance[1]
+  }
+  
+  M[ends, 1:2] <- M[ends, 1:2] + distances * c(cos(headings), sin(headings))
+  newline <- sf::st_linestring(M)
+
+  # If input is sfc_LINESTRING and not sfg_LINESTRING
+  if (is.list(line)) newline <- sf::st_sfc(newline, crs = sf::st_crs(line))
+  
+  return(newline)
 }
 
 
@@ -39,7 +84,7 @@ extend_linestring <- function(linestring, n, heading, distance)
 #' @noRd
 st_point_on_line <- function(distance, line, from_end = FALSE)
 {
-  if (distance > as.numeric(sf::st_length(line))) stop("\"distance\" must be smaller than the total length of \"line\"")
+  if (distance > as.numeric(sf::st_length(line))) stop("'distance' must be smaller than the total length of 'line'")
 
   coords <- sf::st_coordinates(line)
 
@@ -69,26 +114,29 @@ st_point_on_line <- function(distance, line, from_end = FALSE)
 #' Split line at a given point
 #'
 #' Split line at a specified point. The point must be
-#' within the tolerance from the line for a split to occur.
+#' within the tolerance value of the line for a split to occur.
 #'
 #' @param split_point  point (\code{sfc} format) at which the \code{line} will be split.
 #' @param line  line (\code{sfc} format)
 #' @param tolerance  numeric; maximum distance allowed between the point and the line
-#' for a split to occur
+#' for a split to occur.
 #'
 #' @return geometries (as \code{sfc_LINESTRING}) resulting from the split.
 #' @noRd
 st_split_at_point <- function(split_point, line, tolerance = 0.01)
 {
   # Make a small perpendicular linestring for the splitting
-  # operation as the split point provided won't split if
-  # it isn't exactly on one of the line's vertices
+  # operation as the split point provided won't split line
+  # as it can't be exactly on the line, except at one of the
+  # line's vertices. The reason is that the segment between two
+  # vertices is define by a function and thus (almost) no point
+  # on it can be described by a 64-bit float value.
   blade <- sf::st_nearest_points(split_point, line)
 
-  if (as.numeric(sf::st_length(blade)) > tolerance) stop("\"split_point\" too far from \"line\" to perform split")
+  if (as.numeric(sf::st_length(blade)) > tolerance) stop("'split_point' too far from 'line' to perform split")
 
   # Sharpen blade (by slightly extending it)!
-  coords <- st_coordinates(blade)
+  coords <- sf::st_coordinates(blade)
   theta <- atan2(diff(coords[,2]), diff(coords[,1]))
 
   xmax <- max(coords[,"X"]) + abs(0.01 * cos(theta))

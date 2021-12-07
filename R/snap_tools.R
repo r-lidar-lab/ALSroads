@@ -82,8 +82,8 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
 {
   IDs1 <- sort(unique(roads[[field]]))
   IDs2 <- sort(unique(roads_ori[[field]]))
-  if (length(IDs1) != length(roads[[field]])) stop("Values in unique identifier field are not unique for \"roads\".", call. = FALSE)
-  if (length(IDs2) != length(roads_ori[[field]])) stop("Values in unique identifier field are not unique for \"roads_ori\".", call. = FALSE)
+  if (length(IDs1) != length(roads[[field]])) stop("Values in unique identifier field are not unique for 'roads'.", call. = FALSE)
+  if (length(IDs2) != length(roads_ori[[field]])) stop("Values in unique identifier field are not unique for 'roads_ori'.", call. = FALSE)
   if (!all(IDs1 == IDs2)) stop("Values in unique identifier field are not the same in both road datasets.", call. = FALSE)
   
   dist_unit <- sf::st_crs(roads)$units
@@ -97,17 +97,15 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
   {
     if (end) {
       get_end <- lwgeom::st_endpoint
-      suf <- sapply(sf::st_geometry(roads), nrow)
     } else {
       get_end <- lwgeom::st_startpoint
-      suf <- 1
     }
     
     out <- get_end(roads) |>
       sf::st_coordinates() |>
       dplyr::as_tibble() |>
       dplyr::mutate(pos = 1:nrow(roads)) |>
-      dplyr::mutate(limit = suf) |>
+      dplyr::mutate(end = end) |>
       dplyr::mutate(id = paste0(roads[[field]], "_", end))
     
     return(out)
@@ -115,20 +113,12 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
   
   # Extraction of roads end points coordinates along with heading and
   # association with a unique identifier
-  # Note that in "tb_ends_roads", entries of tb_endpoint must be
-  # before those of tb_startpoint because this order is assumed
-  # when updating the "limit" column elsewhere in the code
 
   # Corrected roads
   tb_endpoint <- prepare_data(roads, TRUE)
   tb_startpoint <- prepare_data(roads, FALSE)
   
-  ls_heading <- lapply(sf::st_geometry(roads), st_ends_heading)
-  heading_tail_head <- c(sapply(ls_heading, tail, 1),
-                         sapply(ls_heading, head, 1))
-  
   tb_ends_roads <- rbind(tb_endpoint, tb_startpoint) |>
-    dplyr::mutate(heading = heading_tail_head) |>
     dplyr::mutate(SCORE = rep(roads[["SCORE"]], 2)) |>
     dplyr::mutate(STATE = rep(roads[["STATE"]], 2))
   
@@ -192,7 +182,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       IDs_field <- roads[pos,][[field]]
       IDs_glued <- glue::glue_collapse(IDs_field, ", ")
 
-      warning(glue::glue("Impossible to connect together roads with \"{field}\" {IDs_glued}; distance from expected junction exceed tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
       next
     }
     
@@ -205,11 +195,16 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       # Update geometry of the two corrected segments composing the bridge
       for (j in 1:2)
       {
-        lim <- tb_node_bridge[j,][["limit"]]
         pos <- tb_node_bridge[j,][["pos"]]
+        n <- if (tb_node_bridge[j,][["end"]])
+        {
+          nrow(sf::st_coordinates(roads[pos,]))
+        } else {
+          1
+        }
         
-        sf::st_geometry(roads[pos,])[[1]][lim, 1] <- mean(tb_node_bridge[["X"]])
-        sf::st_geometry(roads[pos,])[[1]][lim, 2] <- mean(tb_node_bridge[["Y"]])
+        sf::st_geometry(roads[pos,])[[1]][n, 1] <- mean(tb_node_bridge[["X"]])
+        sf::st_geometry(roads[pos,])[[1]][n, 2] <- mean(tb_node_bridge[["Y"]])
       }
       next
     }
@@ -218,7 +213,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
     # Merge the two segments forming the bridge.
     # This will allow for an easier split when the 
     # exact position of the junction will be found.
-    bridge <- st_make_bridge(roads, tb_node_bridge)
+    bridge <- make_bridge(roads, tb_node_bridge)
     
     
     # Find intersection points between the remaining
@@ -229,12 +224,12 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
     tb_node_remain <- dplyr::filter(tb_node_cor, id %in% remain_ids)
 
     pos <- tb_node_remain[["pos"]]
-    n <- tb_node_remain[["limit"]]
-    heading <- tb_node_remain[["heading"]]*pi/180
+    end <- tb_node_remain[["end"]]
+    head_tail = sapply(as.numeric(end) + 1, function(x) c("HEAD", "TAIL")[x])
     
     lines_extended <- roads[pos,] |>
         sf::st_geometry() |>
-        mapply(n, heading, 999999, FUN = extend_linestring, SIMPLIFY = FALSE) |>
+        mapply(999999, head_tail, FUN = st_extend_line, SIMPLIFY = FALSE) |>
         sf::st_sfc(crs = sf::st_crs(roads))
     
     dist_bridge <- sapply(lines_extended,
@@ -257,7 +252,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       IDs_field <- roads[pos,][[field]]
       IDs_glued <- glue::glue_collapse(IDs_field, ", ")
 
-      warning(glue::glue("Impossible to connect together roads with \"{field}\" {IDs_glued}; distance from expected junction exceed tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
       next
     }
     
@@ -287,13 +282,6 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
     sf::st_geometry(roads[pos,]) <- bridge_geometries
     
     
-    # Update "limit" values in tb_ends_roads table
-    # as the splitting operation might change the
-    # total number of vertices in the geometry
-    tb_ends_roads[pos, "limit"] <- c(nrow(bridge_geometries[[1]]),
-                                     nrow(bridge_geometries[[2]]))
-    
-    
     # Update coordinates of remaining segments
     # by splitting in order to avoid potential
     # overlapping segment if it was already crossing
@@ -302,13 +290,12 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
     for (j in idx_valid_intersection)
     {
       pos <- tb_node_remain[j,][["pos"]]
-      n <- tb_node_remain[j,][["limit"]]
-      heading <- tb_node_remain[j,][["heading"]]*pi/180
+      end <- tb_node_remain[j,][["end"]]
+      head_tail = c("HEAD", "TAIL")[as.numeric(end) + 1]
 
       road_extended <- roads[pos,] |>
         sf::st_geometry() |>
-        mapply(n, heading, 999999, FUN = extend_linestring, SIMPLIFY = FALSE) |>
-        sf::st_sfc(crs = sf::st_crs(roads))
+        st_extend_line(999999, head_tail)
 
       road_split <- road_extended |>
         lwgeom::st_split(bridge[["bridge"]]) |>
@@ -321,6 +308,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       # and the junction vertex with the bridge
       coords_split <- sf::st_coordinates(road_split)
       coords_extended <- sf::st_coordinates(road_extended)
+      n <- ifelse(end, nrow(coords_extended), 1)
       x_match_extended <- coords_split[,"X"] == coords_extended[n, "X"]
       y_match_extended <- coords_split[,"Y"] == coords_extended[n, "Y"]
       idx_match_extended <- which(x_match_extended & y_match_extended)
@@ -343,7 +331,7 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       coords_keep <- coords_split[-(idx_near_junc:idx_match_extended),-3]
 
       # Edit the coordinates at (mean) splitting point
-      idx_junction <- ifelse(n != 1, nrow(coords_keep), 1)
+      idx_junction <- ifelse(end, nrow(coords_keep), 1)
       coords_keep[idx_junction,] <- coords_junction
       
       # Remove duplicates vertices created by the splitting operation
@@ -355,12 +343,6 @@ st_snap_lines2 <- function(roads, roads_ori, field, tolerance = 30)
       sf::st_geometry(roads[pos,]) <- coords_keep |>
         sf::st_linestring() |>
         sf::st_sfc(crs = sf::st_crs(roads))
-      
-      
-      # Update "limit" values in tb_ends_roads table
-      # as the splitting operation might change the 
-      # total number of vertices in the geometry
-      tb_ends_roads[pos, "limit"] <- nrow(coords_keep)
     }
   }
   
@@ -459,15 +441,16 @@ find_best_connexion <- function(tb_node)
 #'
 #' @param roads  lines (\code{sf} format). Corrected roads.
 #' @param tb_node_bridge  \code{tibble} containing info about the two lines to be connected. Must contain
-#' the corresponding row index in \code{roads} as well as end vertex coordinates and index to be connected.
+#' the corresponding row index in \code{roads} (field 'pos') as well as boolean value indicating if the vertex to connect correspond
+#' to the end/tail one (field 'end').
 #'
 #' @return Named list containing the created \code{bridge} (as \code{sfc_LINESTRING}), the \code{junction} point (as \code{sfc_POINT})
 #' and a vector indicating which line has been \code{reversed}.
 #' @noRd
-st_make_bridge <- function(roads, tb_node_bridge)
+make_bridge <- function(roads, tb_node_bridge)
 {
-  lim_1 <- tb_node_bridge[1,][["limit"]]
-  lim_2 <- tb_node_bridge[2,][["limit"]]
+  end_1 <- tb_node_bridge[1,][["end"]]
+  end_2 <- tb_node_bridge[2,][["end"]]
   pos_1 <- tb_node_bridge[1,][["pos"]]
   pos_2 <- tb_node_bridge[2,][["pos"]]
   coord_1 <- sf::st_coordinates(roads[pos_1,])[,-3]
@@ -478,17 +461,17 @@ st_make_bridge <- function(roads, tb_node_bridge)
   # Sometimes, reversing direction of one of the
   # two segments is needed in order to obtain a
   # "continuous flow" of the vertices
-  if (lim_1 == 1)
+  if (!end_1)
   {
     rev_1 <- TRUE
     coord_1 <- apply(coord_1, 2, rev)
-    if (lim_2 != 1)
+    if (end_2)
     {
       rev_2 <- TRUE
       coord_2 <- apply(coord_2, 2, rev)
     }
   } else {
-    if (lim_2 != 1)
+    if (end_2)
     {
       rev_2 <- TRUE
       coord_2 <- apply(coord_2, 2, rev)
