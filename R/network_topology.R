@@ -1,6 +1,6 @@
 #' Check for missing road junctions
 #'
-#' Check if some road endings are closed enough to be considered as being potentially part of a junction.
+#' Check if some road endings are close enough to be considered as being potentially part of a junction.
 #' Road endings that are actually touching are not considered. Fixing can be done by running \link{st_snap_lines}
 #' with the same \code{tolerance} value and the same road network.
 #'
@@ -10,6 +10,26 @@
 #' @return Polygon object (\code{sf} format) corresponding to circles of \code{tolerance} radius around the locations where
 #' junctions might be missing.
 #' @export
+#' @examples
+#' library(sf)
+#'
+#' network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+#'
+#' roads <- sf::st_read(network, "invalid_topology")
+#' 
+#' junctions <- st_check_junctions(roads)
+#'
+#' par(mfrow = c(1,2))
+#' for (k in 1:2)
+#' {
+#'   junction <- junctions[k,]
+#'   bbox <- st_bbox(junction)
+#'   plot(st_geometry(junctions), col = "cyan", xlim = c(bbox[c("xmin", "xmax")]), ylim = c(bbox[c("ymin", "ymax")]))
+#'   plot(st_geometry(roads), col = "red", lwd = 3, add = TRUE)
+#'   title(main = k,
+#'         sub = paste0("\nConnected: ", junction[["nb_connected"]],
+#'                      "\nUnconnected: ", junction[["nb_unconnected"]]))
+#' }
 st_check_junctions = function(roads, tolerance = 8)
 {
   end   <- lwgeom::st_endpoint(roads)
@@ -18,10 +38,16 @@ st_check_junctions = function(roads, tolerance = 8)
   
   group_pts <- sf::st_is_within_distance(ends, ends, tolerance) |>
     lapply(sort) |>
-    Filter(f = function(x) { length(x) > 1}) |>
+    Filter(f = function(x) { length(x) > 1 }) |>
     unique() |>
     lapply(function(x) { ends[x] })
   
+  if (length(group_pts) == 0)
+  {
+    warning("No junctions found using current tolerance value.", .call = FALSE)
+    return(NULL)
+  }
+
   mean_pts <- group_pts |>
     lapply(function(x) { sf::st_point(colMeans(sf::st_coordinates(x))) }) |>
     sf::st_sfc(crs = sf::st_crs(roads))
@@ -57,13 +83,26 @@ st_check_junctions = function(roads, tolerance = 8)
 #'
 #' @return Point object (\code{sf} format) corresponding to intersection points of crossing roads.
 #' @export
+#' @examples
+#' library(sf)
+#'
+#' network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+#'
+#' roads <- sf::st_read(network, "invalid_topology")
+#' 
+#' crossings <- st_check_crossings(roads)
+#'
+#' plot(st_geometry(roads), col = "red") # Inspected roads
+#' plot(st_geometry(crossings), col = "blue", add = TRUE) # Crossings to fix
 st_check_crossings = function(roads)
 {
   geom <- sf::st_geometry(roads)
   
   group_cross <- sf::st_crosses(geom, geom) |>
-    mapply(1:nrow(roads), FUN = function(x, i) {c(i, x)}) |>
+    mapply(1:nrow(roads), FUN = function(x, i) { c(i, x) }) |>
     Filter(f = function(x) { length(x) > 1})
+  
+  if (length(group_cross) == 0) return(NULL)
   
   # Intersection points are cast to MULTIPOINT to allow
   # extraction of coordinates of a single geometry type
@@ -76,7 +115,9 @@ st_check_crossings = function(roads)
     }) |>
     do.call(what = rbind)
   
-  pts_crossings <- coords[,1:2] |>
+  unique <- !duplicated(coords[,1:2])
+  
+  pts_crossings <- coords[unique, 1:2] |>
     as.data.frame() |>
     sf::st_as_sf(coords = c(1,2), crs = sf::st_crs(roads))
   
