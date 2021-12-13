@@ -102,7 +102,8 @@ st_check_crossings = function(roads)
     mapply(1:nrow(roads), FUN = function(x, i) { c(i, x) }) |>
     Filter(f = function(x) { length(x) > 1})
   
-  if (length(group_cross) == 0) return(NULL)
+  # Outputs empty sf if no road crosses others
+  if (length(group_cross) == 0) return(sf::st_sf(sf::st_sfc(), crs = sf::st_crs(roads)))
   
   # Intersection points are cast to MULTIPOINT to allow
   # extraction of coordinates of a single geometry type
