@@ -52,14 +52,23 @@ drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max
 
   if (resolution < 2)
   {
-    cat("Step 0: downsample conductivity\n")
     agg_factor <- ceiling(2 / resolution)
+    resolution <- resolution * agg_factor
+    cat("Step 0: downsample conductivity to", resolution, "m\n"))
     conductivity <- terra::aggregate(conductivity, fact = agg_factor, fun = mean, na.rm = TRUE)
-    resolution <- terra::res(conductivity)[1]
   }
 
-  angular_resolution = floor((180*resolution)/(pi*radius))
-  angles = seq(-fov, fov, angular_resolution) * pi / 180
+  if (radius < resolution) stop("Radius must be equal or larger than resolution of 'conductivity' raster.", call. = FALSE)
+
+  # Set possible search angles
+  angular_resolution <- floor((angular_resolution / radius) * (180 / pi))
+  angles <- seq(angular_resolution, fov, angular_resolution)
+  angles <- c(rev(-angles), 0, angles)
+
+  # Set penalty coefficient for each search angle
+  penalty_at_45_degrees <- 1.5
+  penalty <- abs(angles) / fov
+  penalty <- penalty * (penalty_at_45_degrees - 1) + 1
 
   # Transition matrix
   cat("Step 1: computation of the transition matrix\n")
@@ -87,8 +96,8 @@ drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max
     heading <- get_heading(p1, p2)
 
     # Create all possible ends ahead of the previous point
-    X <- p2[1] + radius * cos(heading + angles)
-    Y <- p2[2] + radius * sin(heading + angles)
+    X <- p2[1] + radius * cos(heading + angles * pi / 180)
+    Y <- p2[2] + radius * sin(heading + angles * pi / 180)
 
     M <- data.frame(X,Y)
     ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
@@ -101,11 +110,7 @@ drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max
     cost <- as.numeric(gdistance::costDistance(trans, start, ends))
     cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
 
-    # Add cost penalties based on heading
-    # Up to 50% on heading of 45 degrees
-    penalty_at_45_degrees <- 1.5
-    penalty <- (abs(angles) * 180/pi) / fov
-    penalty <- penalty * (penalty_at_45_degrees - 1) + 1
+    # Adjust cost based on angle penalties
     cost2 <- ma(cost * penalty)
 
     # Select point coordinates with the lowest
