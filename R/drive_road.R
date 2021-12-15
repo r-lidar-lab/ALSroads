@@ -25,9 +25,10 @@ ma <- function(x, n = 3)
 #'
 #' @param start_line  line (\code{sf} format)
 #' @param conductivity  raster (\code{terra} format)
-#' @param radius  numeric (distance unit). Search radius used to find the next most probable point on the road.
 #' @param fov  numeric. Field of view (degrees) ahead of the search vector.
+#' @param radius  numeric (distance unit). Search radius used to find the next most probable point on the road.
 #' @param cost_max  numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
+#' If no value is provided \code{radius * 6} will be.
 #'
 #' @return list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector of cost at each invidual vertices of the line.
 #' @export
@@ -38,35 +39,39 @@ ma <- function(x, n = 3)
 #' conductivity <- rast("conductivity.tif")
 #' start_line <- st_read("start_line.gpkg")
 #' 
-#' res <- drive_road(start_line, conductivity, cost_max = 60)
+#' res <- drive_road(start_line, conductivity)
 #' 
 #' raster::plot(conductivity, col = viridis::viridis(50))
-#' plot(start_line, add = T, col = "red")
 #' raster::plot(res$line, add = TRUE, col = "red", lwd = 2)
+#' raster::plot(start_line, add = TRUE, col = "green", lwd = 3)
 #' plot(res$cost, type = "l")
-drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max = 50)
+drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
 {
-  # TODO Defaut value of "cost_max" might need to be something else as it is function
-  #      of the "radius" parameter and the final resolution of "conductivity"
-  resolution <- terra::res(conductivity)[1]
+  if (is.null(cost_max)) cost_max <- radius * 6
+  
+  resolution <- terra::res(conductivity)
+  if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
+  resolution <- resolution[1]
 
-  if (resolution < 2)
+  resolution_min <- 2  # Could be set as a parameter
+  if (resolution < resolution_min)
   {
-    agg_factor <- ceiling(2 / resolution)
+    agg_factor <- ceiling(resolution_min / resolution)
     resolution <- resolution * agg_factor
-    cat("Step 0: downsample conductivity to", resolution, "m\n"))
+    cat("Step 0: downsample conductivity to", resolution, "m\n")
     conductivity <- terra::aggregate(conductivity, fact = agg_factor, fun = mean, na.rm = TRUE)
   }
 
   if (radius < resolution) stop("Radius must be equal or larger than resolution of 'conductivity' raster.", call. = FALSE)
 
   # Set possible search angles
-  angular_resolution <- floor((angular_resolution / radius) * (180 / pi))
+  angular_resolution <- floor((resolution / radius) * (180 / pi))
   angles <- seq(angular_resolution, fov, angular_resolution)
   angles <- c(rev(-angles), 0, angles)
+  angles_rad <- angles * pi / 180
 
   # Set penalty coefficient for each search angle
-  penalty_at_45_degrees <- 1.5
+  penalty_at_45_degrees <- 1.5  # Could be set as a parameter
   penalty <- abs(angles) / fov
   penalty <- penalty * (penalty_at_45_degrees - 1) + 1
 
@@ -96,8 +101,8 @@ drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max
     heading <- get_heading(p1, p2)
 
     # Create all possible ends ahead of the previous point
-    X <- p2[1] + radius * cos(heading + angles * pi / 180)
-    Y <- p2[2] + radius * sin(heading + angles * pi / 180)
+    X <- p2[1] + radius * cos(heading + angles_rad)
+    Y <- p2[2] + radius * sin(heading + angles_rad)
 
     M <- data.frame(X,Y)
     ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
@@ -111,6 +116,7 @@ drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max
     cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
 
     # Adjust cost based on angle penalties
+    # and smooth value of adjacent points
     cost2 <- ma(cost * penalty)
 
     # Select point coordinates with the lowest
