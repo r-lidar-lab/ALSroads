@@ -1,23 +1,3 @@
-# Very similar to make_caps()
-# "fov" like in "field-of-view
-make_fov <- function(pt, heading, radius)
-{
-  M1 <- sf::st_coordinates(pt)
-  M2 <- M1 + radius * c(cos(heading), sin(heading))
-  
-  line <- rbind(M1, M2) |>
-    sf::st_linestring() |>
-    sf::st_sfc(crs = sf::st_crs(pt))
-  
-  rectangle <- sf::st_buffer(line, radius, endCapStyle = "FLAT")
-  circle <- sf::st_buffer(pt, radius)
-  
-  fov <- sf::st_intersection(circle, rectangle)
-  
-  return(fov)
-}
-
-
 # Very similar to st_ends_heading()
 get_heading <- function(from, to)
 {
@@ -30,6 +10,7 @@ get_heading <- function(from, to)
 }
 
 
+# Smooth adjacent costs with a mean moving windows
 ma <- function(x, n = 3)
 {
   if (anyNA(x)) x <- zoo::na.approx(x, na.rm = FALSE)
@@ -45,8 +26,8 @@ ma <- function(x, n = 3)
 #' @param start_line  line (\code{sf} format)
 #' @param conductivity  raster (\code{terra} format)
 #' @param radius  numeric (distance unit). Search radius used to find the next most probable point on the road.
+#' @param fov  numeric. Field of view (degrees) ahead of the search vector.
 #' @param cost_max  numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
-#' @param fov  numeric. Field-of-view (degrees) of the search vector.
 #'
 #' @return list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector of cost at each invidual vertices of the line.
 #' @export
@@ -57,34 +38,35 @@ ma <- function(x, n = 3)
 #' conductivity <- rast("conductivity.tif")
 #' start_line <- st_read("start_line.gpkg")
 #' 
-#' res <- drive_road(start_line, conductivity, radius = 10, cost_max = 50)
+#' res <- drive_road(start_line, conductivity, cost_max = 60)
 #' 
 #' raster::plot(conductivity, col = viridis::viridis(50))
 #' plot(start_line, add = T, col = "red")
 #' raster::plot(res$line, add = TRUE, col = "red", lwd = 2)
 #' plot(res$cost, type = "l")
-drive_road <- function(start_line, conductivity, radius = 10, cost_max = 50, fov = 45)
+drive_road <- function(start_line, conductivity, radius = 10, fov = 45, cost_max = 50)
 {
+  # TODO Defaut value of "cost_max" might need to be something else as it is function
+  #      of the "radius" parameter and the final resolution of "conductivity"
   resolution <- terra::res(conductivity)[1]
 
   if (resolution < 2)
   {
-    cat("Steps 0: downsample conductivity\n")
-    conductivity <- terra::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
+    cat("Step 0: downsample conductivity\n")
+    agg_factor <- ceiling(2 / resolution)
+    conductivity <- terra::aggregate(conductivity, fact = agg_factor, fun = mean, na.rm = TRUE)
+    resolution <- terra::res(conductivity)[1]
   }
 
-  resolution <- terra::res(conductivity)[1]
   angular_resolution = floor((180*resolution)/(pi*radius))
   angles = seq(-fov, fov, angular_resolution) * pi / 180
 
-  # Transiton matrix
-  cat("Steps 1: computation of the transition matrix\n")
-
+  # Transition matrix
+  cat("Step 1: computation of the transition matrix\n")
   trans <- conductivity |>
-    as("Raster") |>
+    raster::raster() |>
     gdistance::transition(transitionFunction = mean, directions = 8) |>
     gdistance::geoCorrection()
-
 
   # Initialisation of list of coordinates with starting line
   start_coords <- sf::st_coordinates(start_line)
@@ -92,11 +74,9 @@ drive_road <- function(start_line, conductivity, radius = 10, cost_max = 50, fov
   list_coords <- list(start_coords[1,], start_coords[2,])
 
   # Loop initialisation
-  resolution <- stars::st_dimensions(conductivity)$x$delta
-  crs <- sf::st_crs(start_line)
   still_good <- TRUE
   k <- 2
-  cat("Steps 2: driving the conductivity raster\n")
+  cat("Step 2: driving the conductivity raster\n")
   while(still_good)
   {
     if (k %% 5 == 0) cat(" | ", (k-1)*10, " m", sep = "")
@@ -106,35 +86,35 @@ drive_road <- function(start_line, conductivity, radius = 10, cost_max = 50, fov
     p2 <- list_coords[[k]]
     heading <- get_heading(p1, p2)
 
-    # Create search zone which is only ahead of the previous point
-
-    X <- p2[1] + radius * cos(heading+angles)
-    Y <- p2[2] + radius * sin(heading+angles)
-
-    # Find cost and heading of each edge point
-    start <- sf::st_sfc(sf::st_point(p2))
-    start <- sf::as_Spatial(start)
+    # Create all possible ends ahead of the previous point
+    X <- p2[1] + radius * cos(heading + angles)
+    Y <- p2[2] + radius * sin(heading + angles)
 
     M <- data.frame(X,Y)
-    ends <- sf::st_as_sf(M, coords = c("X", "Y"))
-    ends <- sf::as_Spatial(ends)
+    ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
+      sf::as_Spatial()
+    
+    # Find cost of each edge point
+    start <- sf::st_point(p2) |>
+      sf::st_sfc() |>
+      sf::as_Spatial()
     cost <- as.numeric(gdistance::costDistance(trans, start, ends))
-    cost[is.infinite(cost)] <- 2*max(cost[!is.infinite(cost)])
+    cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
 
+    # Add cost penalties based on heading
+    # Up to 50% on heading of 45 degrees
+    penalty_at_45_degrees <- 1.5
+    penalty <- (abs(angles) * 180/pi) / fov
+    penalty <- penalty * (penalty_at_45_degrees - 1) + 1
+    cost2 <- ma(cost * penalty)
 
-    # Penalisation de 50% du cout a 45 degres
-    penalty_at_45_degrees = 1.5
-    penalty =  (abs(angles)*180/pi)/fov
-    penalty = penalty * (penalty_at_45_degrees - 1) + 1
-    cost2 = cost * penalty_at_45_degrees     ### ICI UNE ERREUR, DEVRAIT ÊTRE   cost2 = cost * penalty
-    cost2 = ma(cost2)
-    #plot(angles*180/pi, cost2, type = "l")
-    #lines(angles*180/pi, cost, col = "red")
-
+    # Select point coordinates with the lowest
+    # penalty adjusted cost
     idx_min <- which.min(cost2)
     cost_selected <- cost[idx_min]
-    W <- as.matrix(M[idx_min,])
-    W <- cbind(W, cost_selected)
+    W <- M[idx_min,] |>
+      as.matrix() |>
+      cbind(cost_selected)
 
     # Check if maximal cost criterea is met
     # before saving the least-cost pixel coordinates
@@ -151,8 +131,9 @@ drive_road <- function(start_line, conductivity, radius = 10, cost_max = 50, fov
   }
 
   m_coords <- do.call(rbind, list_coords)
-  newline <- sf::st_linestring(m_coords[,1:2])
-  newline <- sf::st_sfc(newline, crs = crs)
+  newline <- m_coords[,1:2] |>
+    sf::st_linestring() |>
+    sf::st_sfc(crs = sf::st_crs(start_line))
 
   return(list(line = newline, cost = m_coords[,3]))
 }
