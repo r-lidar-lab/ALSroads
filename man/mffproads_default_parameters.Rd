@@ -19,7 +19,8 @@ and compute profiles
 \itemize{
 \item \strong{road_max_len}: maximum size of a processed road. If longer than that it will be split in
 chunks of equal sizes such as no one is more than this size.
-\item \strong{road_buffer}: width of the point-cloud extracted around the road
+\item \strong{road_max_width}: maximum width of a road for metrics measurements
+\item \strong{road_buffer}: width of a buffer around the road for point-cloud extraction
 \item \strong{section_length}: length of sections of road for metrics measurements
 \item \strong{profile_resolution}: resolution of the profiles and DTMs for metrics measurements
 }
