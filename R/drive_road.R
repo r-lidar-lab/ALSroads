@@ -148,3 +148,78 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
 
   return(list(line = newline, cost = m_coords[,3]))
 }
+
+
+#' Generate and save to file tile of conductivity
+#'
+#' Generate and save to file tile of conductivity based on the extent
+#' of an area of interest.
+#'
+#' @param bbox  named numeric vector. Bounding box vector with names \code{xmin}, \code{xmax}, \code{ymin}, \code{ymax}
+#' @param dtm  raster (\code{raster} format). Digital terrain model covering \code{bbox}.
+#' @param ctg  \code{LAScatalog} covering \code{bbox}.
+#' @param buffer  numeric (distance unit). Buffer to be added outside of \code{bbox} when computing metrics. Won't affect extent of the produced tile.
+#' @param outdir  character. Directory in which the produced tile will be saved.
+#'
+#' @return character representing filenames of generated tiles.
+#' @export
+#' @examples
+#' library(sf)
+#' library(raster)
+#' library(lidR)
+#' library(future)
+#' library(future.apply)
+#'
+#' rootdir = "Y:/Developpement/Chemins_forestiers/drive_road"
+#' setwd(rootdir)
+#' 
+#' outdir = getwd()
+#' size = 500
+#' buffer = 5
+#' aoi = sf::st_read("aoi.gpkg")
+#' ctg = readLAScatalog("LAZ")
+#' dtm = raster("dtm.tif")
+#' dtm = crs(aoi)
+#' 
+#' 
+#' # Grid that will be used to make tiles
+#' bbox <- st_bbox(aoi)
+#' bbox[c("xmin","ymin")] <- floor(bbox[c("xmin","ymin")])
+#' bbox[c("xmax","ymax")] <- ceiling(bbox[c("xmax","ymax")])
+#' grid <- st_make_grid(bbox, size)
+#' 
+#' # List of bboxes for parallelisation
+#' bboxes <- lapply(grid, function(x) {
+#'   coords <- st_coordinates(x)
+#'   bbox <- c(range(coords[,"X"]), range(coords[,"Y"]))
+#'   names(bbox) <- c("xmin","xmax","ymin","ymax")
+#'   bbox})
+#' 
+#' # Generate tiles
+#' future::plan(multisession)
+#' filenames <- future.apply::future_sapply(bboxes, tile_conductivity, dtm, ctg, buffer, outdir)
+#' future::plan(sequential)
+#' 
+#' # Create VRT from tiles
+#' vrtfile <- file.path(outdir, "conductivity.vrt")
+#' terra::vrt(file.path(outdir, filenames), vrtfile)
+tile_conductivity <- function(bbox, dtm, ctg, buffer, outdir)
+  {
+    # Buffer added to bbox to ensure valid calculations at edges and thus
+    # a smooth transition between tiles
+    res <- raster::xres(dtm)
+    bbox_buf <- c(bbox["xmin"], bbox["xmax"], bbox["ymin"], bbox["ymax"]) + c(-buffer*res, buffer*res, -buffer*res, buffer*res)
+
+    # Crop DTM and point cloud
+    cropped <- raster::crop(dtm, raster::extent(bbox_buf))
+    las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
+    
+    # Compute and write to file final conductivity layer
+    conductivities <- grid_conductivity(las, cropped, road = NULL, water = NULL)
+    conductivity <- raster::crop(conductivities$conductivity, raster::extent(bbox))
+
+    filename <- paste0("conductivity_", bbox["xmin"], "_", bbox["ymin"], ".tif")
+    raster::writeRaster(conductivity, file.path(outdir, filename))
+
+    return(filename)
+  }
