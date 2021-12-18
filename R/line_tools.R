@@ -47,7 +47,7 @@ st_extend_line <- function(line, distance, end = "BOTH")
   
   ends <- c(1, nrow(M))[keep]
   headings <- st_ends_heading(line)[keep] / 180 * pi
-  distances <- if (length(distance) == 1) rep(distance, 2) else distance[1:2]
+  distances <- if (length(distance) == 1) rep(distance, 2) else rev(distance[1:2])
   
   M[ends, 1:2] <- M[ends, 1:2] + distances[keep] * c(cos(headings), sin(headings))
   newline <- sf::st_linestring(M)
