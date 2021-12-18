@@ -53,13 +53,33 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
   if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
   resolution <- resolution[1]
 
+  # Initialisation of list of coordinates with starting line
+  start_coords <- sf::st_coordinates(start_line)
+  start_coords[,3] <- 0
+  list_coords <- list(start_coords[1,], start_coords[2,])
+
+  # Crop conductivity raster
+  # The idea is to only extract values that are mostly ahead of the line
+  p1 <- list_coords[[1]]
+  p2 <- list_coords[[2]]
+  heading <- get_heading(p1, p2)
+
+  buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
+
+  aoi <- start_line |>
+    st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
+    sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
+    terra::vect()
+
+  conductivity_crop <- terra::crop(conductivity, aoi)
+
   resolution_min <- 2  # Could be set as a parameter
   if (resolution < resolution_min)
   {
     agg_factor <- ceiling(resolution_min / resolution)
     resolution <- resolution * agg_factor
     cat("Step 0: downsample conductivity to", resolution, "m\n")
-    conductivity <- terra::aggregate(conductivity, fact = agg_factor, fun = mean, na.rm = TRUE)
+    conductivity_crop <- terra::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
   }
 
   if (radius < resolution) stop("Radius must be equal or larger than resolution of 'conductivity' raster.", call. = FALSE)
@@ -77,21 +97,15 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
 
   # Transition matrix
   cat("Step 1: computation of the transition matrix\n")
-  trans <- conductivity |>
+  trans <- conductivity_crop |>
     raster::raster() |>
-    gdistance::transition(transitionFunction = mean, directions = 8) |>
-    gdistance::geoCorrection()
-
-  # Initialisation of list of coordinates with starting line
-  start_coords <- sf::st_coordinates(start_line)
-  start_coords[,3] <- 0
-  list_coords <- list(start_coords[1,], start_coords[2,])
+    transition()
 
   # Loop initialisation
-  still_good <- TRUE
+  cost_selected <- 0
   k <- 2
   cat("Step 2: driving the conductivity raster\n")
-  while(still_good)
+  while (cost_selected <= cost_max)
   {
     if (k %% 5 == 0) cat(" | ", (k-1)*10, " m", sep = "")
 
@@ -108,11 +122,51 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
     ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
       sf::as_Spatial()
     
+    # Check if some ends fall outside of the cropped conductivity raster
+    val <- terra::extract(conductivity_crop, M)
+    if (any(is.nan(val[,2])))
+    {
+      # Make a newly cropped conductivity raster further ahead
+      line <- c(p1[1:2], p2[1:2]) |>
+        matrix(ncol = 2, byrow = TRUE) |>
+        sf::st_linestring() |>
+        sf::st_sfc(crs = sf::st_crs(start_line))
+      
+      aoi <- line |>
+        st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
+        sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
+        terra::vect()
+
+      conductivity_crop <- terra::crop(conductivity, aoi)
+
+      resolution <- terra::res(conductivity)[1]
+      resolution_min <- 2  # Could be set as a parameter
+      if (resolution < resolution_min)
+      {
+        agg_factor <- ceiling(resolution_min / resolution)
+        resolution <- resolution * agg_factor
+        conductivity_crop <- terra::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
+      }
+
+      # Check again if some ends fall outside of the newly cropped conductivity raster
+      val <- terra::extract(conductivity_crop, M)
+      if (any(is.nan(val[,2])))
+      {
+        warning("Drive stopped early. Edge of conductivity raster has been reached.", call. = FALSE)
+        cost_max <- -Inf
+      }
+
+      # Generate a new transition matrix
+      trans <- conductivity_crop |>
+        raster::raster() |>
+        transition()
+    }
+
     # Find cost of each edge point
     start <- sf::st_point(p2) |>
       sf::st_sfc() |>
       sf::as_Spatial()
-    cost <- as.numeric(gdistance::costDistance(trans, start, ends))
+    cost <- as.numeric(gdistance::costDistance(trans, start, ends)) |> suppressWarnings()
     cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
 
     # Adjust cost based on angle penalties
@@ -127,22 +181,13 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
       as.matrix() |>
       cbind(cost_selected)
 
-    # Check if maximal cost criterea is met
-    # before saving the least-cost pixel coordinates
-    # or stopping the drive
-    if(cost_selected > cost_max)
-    {
-      still_good <- FALSE
-    }
-    else
-    {
-      k <- k + 1
-      list_coords[[k]] <- W
-    }
+    # Save the least-cost pixel coordinates
+    k <- k + 1
+    list_coords[[k]] <- W
   }
 
   m_coords <- do.call(rbind, list_coords)
-  newline <- m_coords[,1:2] |>
+  newline <- m_coords[-nrow(m_coords), 1:2] |>
     sf::st_linestring() |>
     sf::st_sfc(crs = sf::st_crs(start_line))
 
