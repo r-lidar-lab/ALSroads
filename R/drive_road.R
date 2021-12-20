@@ -201,73 +201,95 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
 #' of an area of interest.
 #'
 #' @param bbox  named numeric vector. Bounding box vector with names \code{xmin}, \code{xmax}, \code{ymin}, \code{ymax}
-#' @param dtm  raster (\code{raster} format). Digital terrain model covering \code{bbox}.
+#' @param dtm  raster (\code{terra} format) or path to raster file. Digital terrain model covering \code{bbox}.
 #' @param ctg  \code{LAScatalog} covering \code{bbox}.
-#' @param buffer  numeric (distance unit). Buffer to be added outside of \code{bbox} when computing metrics. Won't affect extent of the produced tile.
+#' @param buffer  numeric (pixel unit). Buffer to be added outside of \code{bbox} when computing metrics. Won't affect extent of the produced tile.
 #' @param outdir  character. Directory in which the produced tile will be saved.
 #'
 #' @return character representing filenames of generated tiles.
 #' @export
 #' @examples
 #' library(sf)
-#' library(raster)
+#' library(terra)
 #' library(lidR)
 #' library(future)
 #' library(future.apply)
 #'
-#' rootdir = "Y:/Developpement/Chemins_forestiers/drive_road"
-#' setwd(rootdir)
+#' dir <- system.file("extdata", "", package="MFFProads")
+#' path_dtm <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
 #' 
-#' outdir = getwd()
-#' size = 500
-#' buffer = 5
-#' aoi = sf::st_read("aoi.gpkg")
-#' ctg = readLAScatalog("LAZ")
-#' dtm = raster("dtm.tif")
-#' dtm = crs(aoi)
+#' ctg <- readLAScatalog(dir)
+#' dtm <- rast(path_dtm)
 #' 
+#' # Define parameters for grid of tiles
+#' # Internal buffer is only to mess things up a bit
+#' aoi <- st_bbox(ctg) |>
+#'   st_as_sfc() |>
+#'   st_buffer(-14.7)
+#' size <- 500  # (in distance unit)
 #' 
-#' # Grid that will be used to make tiles
+#' # Generate grid of tiles
 #' bbox <- st_bbox(aoi)
 #' bbox[c("xmin","ymin")] <- floor(bbox[c("xmin","ymin")])
-#' bbox[c("xmax","ymax")] <- ceiling(bbox[c("xmax","ymax")])
+#' 
+#' xlength <- bbox["xmax"] - bbox["xmin"]
+#' bbox["xmax"] <- bbox["xmin"] + ceiling(xlength / xres(dtm)) * xres(dtm)
+#' ylength <- bbox["ymax"] - bbox["ymin"]
+#' bbox["ymax"] <- bbox["ymin"] + ceiling(ylength / yres(dtm)) * yres(dtm)
+#'
 #' grid <- st_make_grid(bbox, size)
 #' 
-#' # List of bboxes for parallelisation
-#' bboxes <- lapply(grid, function(x) {
+#' # Generate list of bounding boxes for parallelisation
+#' bboxes <- lapply(grid, function(x)
+#' {
 #'   coords <- st_coordinates(x)
 #'   bbox <- c(range(coords[,"X"]), range(coords[,"Y"]))
 #'   names(bbox) <- c("xmin","xmax","ymin","ymax")
-#'   bbox})
+#'   bbox
+#'  })
 #' 
-#' # Generate tiles
-#' future::plan(multisession)
-#' filenames <- future.apply::future_sapply(bboxes, tile_conductivity, dtm, ctg, buffer, outdir)
-#' future::plan(sequential)
+#' # Generate tiles in parallel
+#' outdir <- tempdir()
+#' buffer <- 5
+#' plan(multisession)
+#' filenames <- future_sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
+#' plan(sequential)
 #' 
-#' # Create VRT from tiles
-#' vrtfile <- file.path(outdir, "conductivity.vrt")
-#' terra::vrt(file.path(outdir, filenames), vrtfile)
-tile_conductivity <- function(bbox, dtm, ctg, buffer, outdir)
+#' # Create VRT from tiles for future use (allow a similar workflow as using a LAScatalog for LAS files)
+#' path_filenames <- file.path(outdir, filenames)
+#' path_vrtfile <- file.path(outdir, "conductivity.vrt")
+#' vrt(path_filenames, path_vrtfile)
+tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0)
+{
+  # Check if dtm is a path or a SpatRast
+  if (class(dtm)[1] != "SpatRast")
   {
-    # Buffer added to bbox to ensure valid calculations at edges and thus
-    # a smooth transition between tiles
-    res <- raster::xres(dtm)
-    bbox_buf <- c(bbox["xmin"], bbox["xmax"], bbox["ymin"], bbox["ymax"]) + c(-buffer*res, buffer*res, -buffer*res, buffer*res)
-
-    # Crop DTM and point cloud
-    cropped <- raster::crop(dtm, raster::extent(bbox_buf))
-    las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
-    
-    # Compute and write to file final conductivity layer
-    conductivities <- grid_conductivity(las, cropped, road = NULL, water = NULL)
-    conductivity <- raster::crop(conductivities$conductivity, raster::extent(bbox))
-
-    filename <- paste0("conductivity_", bbox["xmin"], "_", bbox["ymin"], ".tif")
-    raster::writeRaster(conductivity, file.path(outdir, filename))
-
-    return(filename)
+    if (is.character(dtm))
+      {
+        dtm <- terra::rast(dtm)
+      } else {
+        stop("Invalid 'dtm'. Must be either object 'SpatRast' or path to raster file", call. = FALSE)
+      }
   }
+
+  # Buffer added to bounding box to ensure valid calculations at edges and
+  # thus a smooth transition between tiles
+  resolution <- terra::xres(dtm)
+  bbox_buf <- c(bbox["xmin"], bbox["xmax"], bbox["ymin"], bbox["ymax"]) + resolution * c(-buffer, buffer, -buffer, buffer)
+
+  # Crop DTM and point cloud
+  cropped <- terra::crop(dtm, bbox_buf) |> raster::raster()
+  las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
+  
+  # Compute and write to file final conductivity layer
+  conductivities <- grid_conductivity(las, cropped, road = NULL, water = NULL)
+  conductivity <- raster::crop(conductivities$conductivity, raster::extent(bbox))
+
+  filename <- paste0("conductivity_", bbox["xmin"], "_", bbox["ymin"], ".tif")
+  raster::writeRaster(conductivity, file.path(outdir, filename), overwrite = TRUE, options = "COMPRESS=DEFLATE")
+
+  return(filename)
+}
 
 
 #' Find potential secondary roads from main road
