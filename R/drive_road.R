@@ -268,3 +268,176 @@ tile_conductivity <- function(bbox, dtm, ctg, buffer, outdir)
 
     return(filename)
   }
+
+
+#' Find potential secondary roads from main road
+#'
+#' Tries to find secondary roads (branches) joining the main road using
+#' a conductivity raster and the line geometry of the main road.
+#'
+#' @param road  line (\code{sf} format). Knowed road.
+#' @param conductivity  raster (\code{terra} format). Conductivity raster covering the road.
+#'
+#' @return lines (\code{sf} format) representing potential starting points of branching roads.
+#' @export
+#' @examples
+#' library(sf)
+#' library(terra)
+#'
+#' road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
+#' conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
+#' 
+#' road <- st_read(road, quiet = TRUE)
+#' conductivity <- rast(conductivity)
+#' 
+#' road_branches <- find_road_branches(road, conductivity)
+#' plot(road, col = "green", lwd = 3)
+#' plot(road_branches, col = "red", add=TRUE)
+find_road_branches <- function(road, conductivity)
+{
+  # Subset conductivity raster around the main road
+  # Only consider conductivity values over 0.2 as good enough
+  # to be considered as being potentially part of a road
+  buffer40m <- sf::st_buffer(road, 40)
+  conduc_crop <- terra::crop(conductivity, buffer40m)
+  conductivity_threshold <- terra::mask(conduc_crop > 0.2, terra::vect(buffer40m))
+
+  # Extract boolean raster which should mainly contain
+  # pixels from the input road and the potential side jonctions
+  # It's kind of doing a region growing operation with a seed on
+  # one of the vertices of the main road
+  coords_road <- sf::st_coordinates(road)
+  m_seed <- coords_road[round(nrow(coords_road)/2), -3] |>
+    matrix(nrow = 1)
+
+  # terra::patches() a présentement un bogue où une connection entre deux pixels
+  # au coin supérieur droit / coin inférieur gauche n'est pas prise en compte
+  region_grow <- terra::patches(conductivity_threshold, directions = 8, zeroAsNA = TRUE)
+  
+  value_seed <- terra::extract(region_grow, m_seed)[1,1]
+  conductivity_region <- terra::mask(conduc_crop, region_grow == value_seed, inverse = TRUE, maskvalues = 1)
+
+  # Create (raster) search zone as a band around main road where potential jonction roads could be.
+  # The search zone is between 20 m and 30 m on each side of the main road
+  buffer20m <- sf::st_buffer(road, 20)
+  buffer30m <- sf::st_buffer(road, 30)
+
+  search_zone <- sf::st_difference(buffer30m, buffer20m) |>
+    terra::vect() |>
+    terra::rasterize(conductivity_region)
+
+  # Inside the search zone raster, only keep pixels with high conductivity
+  conductivity_search_zone <- terra::mask(conductivity_region, search_zone, inverse = TRUE, maskvalues = 1)
+  conductivity_search_zone <- terra::mask(conductivity_region, conductivity_search_zone > 0.4, inverse = TRUE, maskvalues = 1)
+
+  # Find clump of pixels that are big enough to be considered
+  # as having a good potential to be part of a road
+  # Thoses pixels are converted to points
+  pts_clump <- conductivity_search_zone |>
+    terra::patches(directions = 8, zeroAsNA = TRUE) |>
+    terra::as.points() |>
+    sf::st_as_sf()
+
+  pts_clump_filtered <- pts_clump |>
+    dplyr::group_by_at(1) |>
+    dplyr::add_count() |>
+    dplyr::filter(n > 10)
+
+  # Find centroid of each filtered clump of pixels/points
+  # to narrow a bit more the number of possible jonction
+  pts_clump_centroid <- pts_clump_filtered |>
+    dplyr::group_by_at(1) |>
+    dplyr::group_split() |>
+    lapply(function(x) { colMeans(sf::st_coordinates(x)) |> c(n = x[1,][["n"]]) }) |>
+    do.call(what = rbind) |>
+    as.data.frame() |>
+    sf::st_as_sf(coords = c("X","Y"), crs = sf::st_crs(road))
+
+  # Link each clump centroid to the closest point on main road
+  # by taking the least-cost path
+  start_lines_pot <- sf::st_nearest_points(pts_clump_centroid, road)
+
+  starts <- lwgeom::st_startpoint(start_lines_pot) |> sf::as_Spatial()
+  ends <- lwgeom::st_endpoint(start_lines_pot) |> sf::as_Spatial()
+
+  trans <- conductivity_region |>
+    raster::raster() |>
+    transition()
+
+  branches_full <- lapply(seq_along(starts), function(i) { gdistance::shortestPath(trans, starts[i], ends[i], output = "SpatialLines") }) |>
+    suppressWarnings() |>
+    do.call(what = rbind) |>
+    sf::st_as_sf() |>
+    sf::st_set_crs(sf::st_crs(road)) |>
+    suppressWarnings()
+
+  # As the closest point on the main road might force a longer path
+  # (in fact, in all cases where the main road ant the jonction road
+  # don't meet at 90°), a small buffer around the main road is used
+  # to clip the least-cost path. The remaining part of the path should
+  # be more representative of the real jonction point between the two roads.
+  buffer2m <- sf::st_buffer(road, 2)
+  branches_clip <- sf::st_difference(branches_full, buffer2m)
+
+  # Only keep first LINESTRING (which will always be the one containing
+  # the starting point) if the difference operation generated
+  # many. Also reverse vertex order at the end so that branches
+  # are going away from the main road
+  branches_first <- branches_clip |>
+    sf::st_geometry() |>
+    lapply(function(x) { sf::st_cast(x, "LINESTRING") }) |>
+    suppressWarnings() |>
+    sf::st_sfc() |>
+    sf::st_as_sf(crs = sf::st_crs(road)) |>
+    sf::st_reverse()
+
+  # Compute the final cost of each path.
+  # The cost is divided by the length of each path in order
+  # to exclude some paths that are inefficient and most likely
+  # false positives
+  starts <- lwgeom::st_startpoint(branches_first) |> sf::as_Spatial()
+  ends <- lwgeom::st_endpoint(branches_first) |> sf::as_Spatial()
+
+  costs <- sapply(seq_along(starts), function(i) { as.numeric(gdistance::costDistance(trans, starts[i], ends[i])) })
+  lengths <- as.numeric(sf::st_length(branches_first))
+
+  branches_cost <- branches_first |>
+    dplyr::mutate(cost_m = costs/lengths) |>
+    dplyr::filter(cost_m < 1.7) |>
+    sf::st_simplify(dTolerance = 2)
+
+  return(branches_cost)
+}
+
+
+#' Conductivity raster from boolean raster
+#'
+#' Conductivity raster from boolean raster. Can be useful if one has a road raster generated
+#' by classification algorithm and whant to extract centerlines from it. The moving window
+#' will enhance the center of an object. In cases of roads (narrow elongated shape), the centerline
+#' will becone more apparent.
+#'
+#' @param x  raster (\code{terra} format). Boolean raster (1/0) where all 1 represent a pixel that might be categorized as a road.
+#' @param w_max  numeric. Maximum window size to use (start from 3x3). Must be an odd number over 3.
+#'
+#' @return  raster (\code{terra} format) of conductivity with values ranging from 0 to 1.
+#' @export
+#' @examples
+#' library(terra)
+#'
+#' segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
+#' segmented_road <- rast(segmented_road)
+#' 
+#' conductivity <- conductivity_from_bool(segmented_road)
+#' plot(conductivity)
+conductivity_from_bool <- function(x, w_max = 15)
+{
+  if ((w_max %% 2 == 0) | (w_max <= 3)) stop("'w_max' must be an odd number over 3.", call. = FALSE)
+
+  conductivity <- seq(3, w_max, 2) |>
+    lapply(function(w) terra::focal(x, w)/w^2) |>
+    terra::sds() |>
+    terra::app(fun = mean)
+
+  return(conductivity)
+}
