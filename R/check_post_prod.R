@@ -49,9 +49,9 @@ check_road_differences <- function(roads, roads_ori, field)
 #' Compute a difference index between two roads by considering them as a polygon 
 #'
 #' Connect the two roads by their ends to construct a polygon from which
-#' its area and perimeter will be computed. A ratio area/perimeter calculated.
+#' a ratio of its area over its perimeter will be calculated.
 #' The larger the value, the larger the differences between the two roads. It
-#' must be noted that in some extreme cases, a low value doesn't mean low differences.
+#' must be noted that in some edge cases, a low value doesn't mean low differences.
 #'
 #' @param road_ori  line (\code{sf} format). Original non-corrected road.
 #' @param road_cor  line (\code{sf} format). Corrected road.
