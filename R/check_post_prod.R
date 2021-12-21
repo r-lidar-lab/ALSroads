@@ -8,7 +8,16 @@
 #'
 #' @return data.frame with metrics about each roads.
 #' @export
-check_road_difference <- function(roads, roads_ori, field)
+#' @examples
+#' library(sf)
+#'
+#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road_ori <- st_read(road, "original", quiet = TRUE)
+#' road_cor <- st_read(road, "corrected", quiet = TRUE)
+#'
+#' df <- check_road_differences(road_cor, road_ori, "objectid")
+#' df
+check_road_differences <- function(roads, roads_ori, field)
 {
   IDs1 <- sort(unique(roads[[field]]))
   IDs2 <- sort(unique(roads_ori[[field]]))
@@ -50,6 +59,14 @@ check_road_difference <- function(roads, roads_ori, field)
 #'
 #' @return numeric. Ratio of the area over the perimeter of the constructed polygon.
 #' @noRd
+#' @examples
+#' library(sf)
+#'
+#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road_ori <- st_read(road, "original", quiet = TRUE)
+#' road_cor <- st_read(road, "corrected", quiet = TRUE)
+#'
+#' ratio <- diff_area_perimeter(road_ori, road_cor, graph = TRUE)
 diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 {
   if (nrow(road_ori) > 1 | nrow(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
@@ -102,7 +119,7 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 }
 
 
-#' Compute differences quantiles based on are far apart are the roads
+#' Compute distances quantiles based on how much the two roads are far apart
 #'
 #' Sample points at regular interval each road and measure distances between
 #' each pair of points. The larger the quantiles are, the larger the differences
@@ -115,6 +132,14 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #'
 #' @return named numeric. Quantiles are P50, P90, P100.
 #' @noRd
+#' @examples
+#' library(sf)
+#'
+#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road_ori <- st_read(road, "original", quiet = TRUE)
+#' road_cor <- st_read(road, "corrected", quiet = TRUE)
+#'
+#' p <- diff_along_road(road_ori, road_cor, graph = TRUE)
 diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
 {
   if (nrow(road_ori) > 1 | nrow(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)

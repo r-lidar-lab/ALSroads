@@ -32,7 +32,7 @@
 #' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
 #' dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
 #' ctg  <- readLAScatalog(dir)
-#' road <- st_read(road, quiet = TRUE)
+#' road <- st_read(road, "original", quiet = TRUE)
 #' dtm  <- raster(dtm)
 #'
 #' # Voluntarily add more error to the road
