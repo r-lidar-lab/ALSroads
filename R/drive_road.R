@@ -332,10 +332,7 @@ find_road_branches <- function(road, conductivity)
   m_seed <- coords_road[round(nrow(coords_road)/2), -3] |>
     matrix(nrow = 1)
 
-  # terra::patches() a présentement un bogue où une connection entre deux pixels
-  # au coin supérieur droit / coin inférieur gauche n'est pas prise en compte
   region_grow <- terra::patches(conductivity_threshold, directions = 8, zeroAsNA = TRUE)
-  
   value_seed <- terra::extract(region_grow, m_seed)[1,1]
   conductivity_region <- terra::mask(conduc_crop, region_grow == value_seed, inverse = TRUE, maskvalues = 1)
 
