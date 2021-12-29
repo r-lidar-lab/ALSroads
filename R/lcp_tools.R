@@ -102,7 +102,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
 
   val <- irange[]
-  th <- stats::quantile(val, probs = c(0.1, 0.25, 0.25), na.rm = TRUE)
+  th <- stats::quantile(val, probs = c(0.1, 0.25, 0.5), na.rm = TRUE)
   conductivity_intensity <- irange
   conductivity_intensity[ irange >= 0 ] <- 1
   conductivity_intensity[ irange > th[1] ] <- 1/2
