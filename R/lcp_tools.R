@@ -1,12 +1,15 @@
-grid_conductivity <- function(las, road, dtm, water = NULL)
+grid_conductivity <- function(las, road, dtm, water = NULL, return_all = FALSE)
 {
   use_intensity <- "Intensity" %in% names(las@data)
+  display <- getOption("MFFProads.debug.finding")
 
   verbose("Computing conductivity maps...\n")
 
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
 
   # Handle bridge case
+  # ....................
+
   bridge = NULL
   if (!is.null(water) && length(water) > 0)
   {
@@ -21,9 +24,13 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   terrain <- raster::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
 
-  dt <- system.time({
+  # Slope-based conductivity
+  # ..........................
+
   smin <- 5
   smax <- 20
+
+  dt <- system.time({
   a <- -1/(smax-smin)
   b <- -a*smax
   slope <- terrain$slope
@@ -32,24 +39,35 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   conductivity_slope[ slope < smin] <- 1
   conductivity_slope[ slope > smax] <- 0
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_slope, col = viridis::viridis(25), main = "Conductivity slope")
   })
   verbose("   - Slope conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
+  # Rougness-based conductivity
+  # ..........................
+
+  r1 <- 0.2
+  r2 <- 0.3
 
   dt <- system.time({
   rough <- terrain$roughness
   conductivity_rough <- rough
-  conductivity_rough[ rough < 0.2 ] <- 1
-  conductivity_rough[ rough >= 0.2 ] <- 1/2
-  conductivity_rough[ rough > 0.3] <- 0
+  conductivity_rough[rough <  r1] <- 1
+  conductivity_rough[rough >= r1] <- 1/2
+  conductivity_rough[rough >  r2] <- 0
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_rough, col = viridis::viridis(3), main = "Conductivity roughness")
 
   })
   verbose("   - Roughness conductivity map in ", round(dt[3],2), "s \n", sep = "")
+
+  # Edge-based conductivity
+  # ..........................
+
+  e1 <- 15
+  e2 <- 40
 
   dt <- system.time({
   edge <- slope
@@ -59,25 +77,30 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   #raster::plot(edge, col = viridis::viridis(30), main = "Sobel")
 
   conductivity_edge <- edge
-  conductivity_edge[ edge < 15 ] <- 1
-  conductivity_edge[ edge >= 15 ] <- 1/2
-  conductivity_edge[ edge > 40 ] <- 0
+  conductivity_edge[ edge < e1 ] <- 1
+  conductivity_edge[ edge >= e1 ] <- 1/2
+  conductivity_edge[ edge > e2 ] <- 0
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_edge, col = viridis::viridis(3), main = "Conductivity Sobel edges")
   })
   verbose("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
+  # Intensity-based conductivity
+  # ..........................
+
   if (use_intensity)
   {
+
+  q <- c(0.1, 0.25, 0.5)
+
   dt <- system.time({
   Intensity <- NULL
-  q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
-  nlas@data[Intensity > 2L*q, Intensity := 2L*q]
+  outliers <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
+  nlas@data[Intensity > 2L*outliers, Intensity := 2L*outliers]
 
   Z = nlas$Z
   nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
-
 
   if (utils::packageVersion("lidR") < "4.0.0")
   {
@@ -98,18 +121,18 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
   irange <- imax - imin
   nlas@data[["Z"]] <- Z
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
 
   val <- irange[]
-  th <- stats::quantile(val, probs = c(0.1, 0.25, 0.5), na.rm = TRUE)
+  th <- stats::quantile(val, probs = q, na.rm = TRUE)
   conductivity_intensity <- irange
   conductivity_intensity[ irange >= 0 ] <- 1
   conductivity_intensity[ irange > th[1] ] <- 1/2
   conductivity_intensity[ irange > th[2] ] <- 1/4
   conductivity_intensity[ irange > th[3]] <- 0
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_intensity, col = viridis::viridis(3), main = "Conductivity intensity")
   })
   verbose("   - Intensity conductivity map in ", round(dt[3],2), "s \n", sep = "")
@@ -120,33 +143,50 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     conductivity_intensity[] <- 0
   }
 
+  # CHM-based conductivity
+  # ..........................
+
+  h1 <- 0.5
+  h2 <- 1
+
   dt <- system.time({
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
   #raster::plot(chm, col = height.colors(50))
 
   conductivity_chm <- chm
-  conductivity_chm[ chm < 0.5 ] <- 1
-  conductivity_chm[ chm >= 0.5 ] <- 1/2
-  conductivity_chm[ chm > 1 ] <- 0
+  conductivity_chm[ chm <  h1] <- 1
+  conductivity_chm[ chm >= h1] <- 1/2
+  conductivity_chm[ chm >  h2] <- 0
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_chm, col = viridis::inferno(3), main = "Conductivity CHM")
   })
   verbose("   - CHM conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
+  # Lowpoints-based conductivity
+  # ............................
+
+  # Check the presence/absance of lowpoints
+  z1 <- 1
+  z2 <- 3
+  th <- 1
 
   dt <- system.time({
-  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 3)
-  d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
-  d12[d12 <= 1] <- 0
-  d12[d12 >= 1] <- 1
-  d12 <- 1-d12
+  tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
+  lp <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
+  lp[lp <= th] <- 0
+  lp[lp >= th] <- 1
+  lp <- 1-lp
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(d12, col = viridis::inferno(3), main = "Bottom layer")
+  if (display)
+    raster::plot(lp, col = viridis::inferno(3), main = "Bottom layer")
   })
   verbose("   - Bottom layer conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
+  # Desnity-based conductivity
+  # ..........................
+
+  q <- c(0.25, 0.75, 0.95)
 
   dt <- system.time({
   gnd <- lidR::filter_ground(nlas)
@@ -157,14 +197,14 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   val <- d[]
   val <- val[val > 0]
-  th <- stats::quantile(val, probs = c(0.25, 0.75, 0.95))
+  th <- stats::quantile(val, probs = q)
   conductivity_density <- d
   conductivity_density[ d == 0 ] <- 0
   conductivity_density[ d > th[1] ] <- 1/4
   conductivity_density[ d > th[2] ] <- 1/2
   conductivity_density[ d > th[3]] <- 1
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_density, col = viridis::inferno(3), main = "Conductivity density")
   })
   verbose("   - Density conductivity map in ", round(dt[3],2), "s \n", sep = "")
@@ -172,53 +212,61 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
 
   dt <- system.time({
   max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1 + as.numeric(use_intensity))
-  conductivity_all <- conductivity_slope * d12 * conductivity_edge * (2 * conductivity_density + conductivity_chm + conductivity_rough + conductivity_intensity)
+  conductivity_all <- conductivity_slope * lp * conductivity_edge * (2 * conductivity_density + conductivity_chm + conductivity_rough + conductivity_intensity)
   conductivity_all <- conductivity_all/max_coductivity
   })
   verbose("   - Global conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
-  if (getOption("MFFProads.debug.finding"))
+  if (display)
     raster::plot(conductivity_all, col = viridis::inferno(15), main = "Conductivity 1m")
 
-  s <- raster::stack(slope,
-                     rough,
-                     conductivity_slope,
-                     conductivity_rough,
-                     conductivity_edge,
-                     chm,
-                     conductivity_chm,
-                     d,
-                     conductivity_density,
-                     irange,
-                     conductivity_intensity,
-                     d12,
-                     conductivity_all)
-  names(s) <- c("slope",
-                "roughness",
-                "conductivity_slope",
-                "conductivity_roughness",
-                "conductivity_edge",
-                "chm",
-                "conductivity_chm",
-                "density",
-                "conductivity_density",
-                "intensity",
-                "conductivity_intensity",
-                "conductivity_bottom",
-                "conductivity")
+  if (!return_all)
+  {
+    s <- raster::stack(conductivity_all)
+    names(s) <- "conductivity"
+  }
+  else
+  {
+    s <- raster::stack(slope,
+                       rough,
+                       conductivity_slope,
+                       conductivity_rough,
+                       conductivity_edge,
+                       chm,
+                       conductivity_chm,
+                       d,
+                       conductivity_density,
+                       irange,
+                       conductivity_intensity,
+                       lp,
+                       conductivity_all)
+    names(s) <- c("slope",
+                  "roughness",
+                  "conductivity_slope",
+                  "conductivity_roughness",
+                  "conductivity_edge",
+                  "chm",
+                  "conductivity_chm",
+                  "density",
+                  "conductivity_density",
+                  "intensity",
+                  "conductivity_intensity",
+                  "conductivity_bottom",
+                  "conductivity")
+  }
 
   if (!is.null(water) && length(water) > 0)
     s <- raster::mask(s, sf::as_Spatial(water), inverse = TRUE)
 
   if (length(bridge) > 0)
   {
-    cells =  raster::cellFromPolygon(s$conductivity, sf::as_Spatial(bridge))
+    cells = raster::cellFromPolygon(s$conductivity, sf::as_Spatial(bridge))
     cells = unlist(cells)
     tmp = s$conductivity
     tmp[cells] = 1
     s$conductivity = tmp
 
-    if (getOption("MFFProads.debug.finding"))
+    if (display)
       raster::plot(s$conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
   }
 
