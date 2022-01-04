@@ -10,6 +10,9 @@ grid_conductivity <- function(las, road, dtm, water = NULL, return_all = FALSE)
   # Handle bridge case
   # ....................
 
+  # If a road crosses a water body it builds a bridge, i.e. a polygon in which we will
+  # force a conductivity of 1 later
+
   bridge = NULL
   if (!is.null(water) && length(water) > 0)
   {
@@ -44,7 +47,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL, return_all = FALSE)
   })
   verbose("   - Slope conductivity map in ", round(dt[3],2), "s \n", sep = "")
 
-  # Rougness-based conductivity
+  # Roughness-based conductivity
   # ..........................
 
   r1 <- 0.2
@@ -73,7 +76,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL, return_all = FALSE)
   edge <- slope
   tmp <- raster::as.matrix(edge)
   tmp <- sobel(tmp)
-  edge[]<- tmp
+  edge[] <- tmp
   #raster::plot(edge, col = viridis::viridis(30), main = "Sobel")
 
   conductivity_edge <- edge
@@ -139,7 +142,7 @@ grid_conductivity <- function(las, road, dtm, water = NULL, return_all = FALSE)
   }
   else
   {
-    conductivity_intensity <- rOverlay(nlas, dtm, buffer = 0)
+    conductivity_intensity <- dtm
     conductivity_intensity[] <- 0
   }
 
@@ -322,9 +325,9 @@ mask_conductivity <- function(conductivity, road, param)
     if (utils::packageVersion("lidR") < "4.0.0")
     {
 
-      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)))
       conductivity[res] <- 1
-      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
+      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)))
       conductivity[res] <- 0
     }
     else
@@ -481,4 +484,3 @@ make_caps <- function(road, param)
 
   return(list(caps = caps, shields = shield))
 }
-
