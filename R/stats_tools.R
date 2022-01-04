@@ -228,3 +228,35 @@ percent <- function(x)
   sum(x)/length(x)
 }
 
+activation <- function(x, th, mode = c("thresholds", "piecewise-linear"), asc = TRUE)
+{
+  mode <- match.arg(mode)
+  y <- numeric(length(x))
+  start <- if (asc) 0 else 1
+  delta <- if (asc) 1 else -1
+
+  if (mode == "piecewise-linear")
+  {
+    stopifnot(length(th) == 2)
+
+    a <- delta/(th[2]-th[1])
+    b <- start -a*th[1]
+    y <- a*x + b
+    y[x > th[2]] <- 1 - start
+    y[x < th[1]] <- start
+  }
+  else
+  {
+    val <- seq(from = 0, to = 1, length.out = length(th) + 1)
+    val <- val[-c(1, length(val))]
+    if (!asc) val <- rev(val)
+
+    for (i in seq_along(th))
+      y[x >= th[i]] <- val[i]
+
+    y[x < th[1]] <- start
+    y[x >= th[length(th)]] <- 1-start
+  }
+
+  return(y)
+}
