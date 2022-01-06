@@ -124,7 +124,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
 
   tb_ends_roads <- rbind(tb_endpoint, tb_startpoint) |>
     dplyr::mutate(SCORE = rep(roads[["SCORE"]], 2)) |>
-    dplyr::mutate(STATE = rep(roads[["STATE"]], 2))
+    dplyr::mutate(CLASS = rep(roads[["CLASS"]], 2))
 
   # Non-corrected roads
   tb_endpoint <- prepare_data(roads_ori, TRUE)
@@ -164,7 +164,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
     # Will only try snapping if at least one of the segments
     # in the group has been corrected as they will already
     # be connected if none has been corrected
-    been_corrected <- any(tb_node_cor[["STATE"]] %in% c(1,2))
+    been_corrected <- any(tb_node_cor[["CLASS"]] %in% c(1,2))
     if (!been_corrected) next
 
 
@@ -172,7 +172,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
     # likely to be the extension of each other
     # Those two are marked out as the "bridge"
     bridge_ids <- tb_node_ori |>
-      dplyr::left_join(dplyr::select(tb_node_cor, id, SCORE, STATE), by = "id") |>
+      dplyr::left_join(dplyr::select(tb_node_cor, id, SCORE, CLASS), by = "id") |>
       find_best_connexion()
 
     tb_node_bridge <- dplyr::filter(tb_node_cor, id %in% bridge_ids)
@@ -413,7 +413,7 @@ find_best_connexion <- function(tb_node)
   m_row   <- combn(seq(nrow(tb_node)), 2)
   m_angle <- combn(tb_node[["norm_heading"]], 2)
   m_score <- combn(tb_node[["SCORE"]], 2)
-  m_state <- combn(ifelse(tb_node[["STATE"]] %in% c(1,2), tb_node[["STATE"]], 3), 2)
+  m_state <- combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
 
   tb_similarity <- dplyr::tibble(
     pairs        = seq(ncol(m_row)),

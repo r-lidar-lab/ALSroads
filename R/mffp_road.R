@@ -82,6 +82,7 @@
 #' @import data.table
 measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_parameters, ...)
 {
+  # Plenty of checks before to run anything
   dots <- list(...)
   lidR::opt_progress(ctg) <- getOption("MFFProads.debug.verbose")
   geometry_type_road <- sf::st_geometry_type(road)
@@ -92,8 +93,11 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   if (sf::st_is_longlat(road)) stop("Expecting a projected CRS for 'road' but found geographic CRS instead.", call. = FALSE)
   if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
 
+  # No warning when called from measure_roads because warning are thrown once only by measure_roads
   if (!isFALSE(dots$Windex))
   {
+    # If the collection is not indexed we throw a warning and even an error if the density is high
+    # Without spatial indexation the road extraction is terribly long
     if (!lidR::is.indexed(ctg))
     {
       d <- density(ctg)
@@ -108,6 +112,8 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
 
   if (getOption("MFFProads.debug.progress")) cat("Progress: ")
 
+  # Check for weird roads. We already found a road with a 90 degrees node at the end of the road
+  # and it broke the output
   angles <- st_angles(road)
   if (any(angles > 90))
   {
@@ -117,16 +123,13 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       warning("Sharp turn (< 90 degrees) between two consecutive segments of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
   }
 
-  dist_unit <- sf::st_crs(road)$units
-  length_min = 4*param$extraction$section_length
-
   # This is the metrics we will estimate on the road. We generate a default output in case we should exit early
   new_road <- road
   new_road$ROADWIDTH     <- NA
   new_road$DRIVABLEWIDTH <- NA
-  new_road$RIGHTOFWAY    <- NA
-  new_road$PABOVE05      <- NA
-  new_road$PABOVE2       <- NA
+  #new_road$RIGHTOFWAY    <- NA
+  new_road$PERCABOVEROAD <- NA
+  #new_road$PABOVE2       <- NA
   new_road$SHOULDERS     <- NA
   new_road$SINUOSITY     <- NA
   new_road$CONDUCTIVITY  <- NA
@@ -140,13 +143,22 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   names <- append(names, ngeom)
   data.table::setcolorder(new_road, names)
 
+
+  # Check the distance between start and end points of the road. If they are too close (e.g. closer than
+  # the size of the buffer) we need to reduce the size of the buffer otherwise we are likely to do
+  # something wrong.
   p1 <- lwgeom::st_startpoint(road)
   p2 <- lwgeom::st_endpoint(road)
   d  <- as.numeric(sf::st_distance(p1, p2))
   if (d < 2 * param[["extraction"]][["road_buffer"]] & !st_is_loop(road))
     param[["extraction"]][["road_buffer"]] <- (d / (2 * param[["extraction"]][["road_buffer"]] + 5) * 2 * param[["extraction"]][["road_buffer"]])/2
 
-  # Cut the road is too long or is loop
+  # Get the units to display informative messages
+  dist_unit  <- sf::st_crs(road)$units
+  length_min <- 4*param[["extraction"]][["section_length"]]
+
+
+  # Return the original geometry without computing anything if the road is too short to compute anything
   len <- as.numeric(sf::st_length(road))
   if (len < length_min) {
     warning(glue::glue("Road too short (< {length_min} {dist_unit}) to compute anything. Original road returned."), call. = FALSE)
@@ -154,12 +166,14 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     return(new_road)
   }
 
+  # Cut the road in subsections if it is too long or it is a loop
   cut <- floor(len/param[["extraction"]][["road_max_len"]])
   if (cut > 0) { message(sprintf("Long road detected. Splitting the roads in %d chunks of %d %s to process.", cut+1, round(sf::st_length(road)/(cut+1)), dist_unit)) }
   if (cut == 0 && st_is_loop(road)) { message(sprintf("Loop detected. Splitting the roads in 2 chunks of %d %s to process.", round(sf::st_length(road)/2,0), dist_unit)) ; cut = 1 }
 
   if (cut > 0)
   {
+    # If we need to cut the road, the road is spitted and we recursively send each piece to this function
     cuts  <- seq(0,1, length.out = cut+2)
     from  <- cuts[-length(cuts)]
     to    <- cuts[-1]
@@ -169,9 +183,9 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     geom  <- st_merge_line(res)
     new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
     new_road$DRIVABLEWIDTH <- mean(res$ROADWIDTH)
-    new_road$RIGHTOFWAY    <- mean(res$RIGHTOFWAY)
-    new_road$PABOVE05      <- mean(res$PABOVE05)
-    new_road$PABOVE2       <- mean(res$PABOVE2)
+    #new_road$RIGHTOFWAY    <- mean(res$RIGHTOFWAY)
+    new_road$PERCABOVEROAD <- mean(res$PERCABOVEROAD)
+    #new_road$PABOVE2       <- mean(res$PABOVE2)
     new_road$SHOULDERS     <- mean(res$SHOULDERS)
     new_road$SINUOSITY     <- sinuosity(new_road)
     new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
@@ -197,16 +211,20 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   # location accurately
   if (param[["constraint"]][["confidence"]] < 1)
   {
-    res <- road_relocate(las, road, dtm, water, param)
+    # This is maybe the most important function of the code. It takes the point cloud, the original
+    # road, the dtm, water bodies and param to draw a new accurate line
+    res <- least_cost_path(las, road, dtm, water, param)
 
+    # If the conductivity of the result is 0 it means that the path finder was not able to reach the
+    # point B. We assume the road does not exist.
     if (res$CONDUCTIVITY == 0)
     {
       warning("Impossible to travel to the end of the road. Road does not exist.", call. = FALSE)
       new_road$ROADWIDTH     <- 0
       new_road$DRIVABLEWIDTH <- 0
-      new_road$RIGHTOFWAY    <- NA
-      new_road$PABOVE05      <- 100
-      new_road$PABOVE2       <- 100
+      #new_road$RIGHTOFWAY    <- NA
+      new_road$PERCABOVEROAD <- 100
+      #new_road$PABOVE2       <- 100
       new_road$SHOULDERS     <- 0
       new_road$SINUOSITY     <- NA
       new_road$CONDUCTIVITY  <- 0
@@ -216,14 +234,17 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       return(new_road)
     }
 
+    # The new road geometry is very short. It is likely a bug that may arise for curved and super short roads
+    # The case is handled to avoid failure but in practice it should not happen for regular road. It is an
+    # exception
     if (as.numeric(sf::st_length(res)) < length_min)
     {
       warning(glue::glue("The computed road is too short (< {length_min} {dist_unit}) to compute anything. Original road returned."), call. = FALSE)
       new_road$ROADWIDTH     <- NA
       new_road$DRIVABLEWIDTH <- NA
-      new_road$RIGHTOFWAY    <- NA
-      new_road$PABOVE05      <- NA
-      new_road$PABOVE2       <- NA
+      #new_road$RIGHTOFWAY    <- NA
+      new_road$PERCABOVEROAD <- NA
+      #new_road$PABOVE2       <- NA
       new_road$SHOULDERS     <- NA
       new_road$SINUOSITY     <- NA
       new_road$CONDUCTIVITY  <- NA
@@ -240,34 +261,28 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     new_road$CONDUCTIVITY <- 1
   }
 
-  # We now have an accurate road (hopefully). We can make measurement on it
-  segment_metrics <- road_measure(las, new_road, param)
-  segment_metrics <- sf::st_as_sf(segment_metrics, coords = c("xroad", "yroad"), crs = sf::st_crs(las))
+  # We now have an accurate road (hopefully). We can make measurement on it. This step extracts the
+  # width profiles of the road, the percentage of points and relocate more accurately the centerline.
+  slice_metrics <- road_measure(las, new_road, param)
 
-  # Insert back send points
-  end <- segment_metrics[nrow(segment_metrics),]
-  end$distance_to_start = sf::st_length(res)
-  end = sf::st_set_geometry(end, lwgeom::st_endpoint(res))
-  end = sf::st_set_crs(end, sf::NA_crs_)
-  end = sf::st_set_crs(end, sf::st_crs(las))
-  segment_metrics <- rbind(segment_metrics, end)
-
+  # I don't remember what it is. I guess it is an hidden debug options
   if (isFALSE(dots$reconstruct_line))
-    return(segment_metrics)
+    return(slice_metrics)
 
-  # We can also improve the coarse measurement given by least cost path
-  if (param[["constraint"]][["confidence"]] < 1 && nrow(segment_metrics) > 4L)
+  # Smooth the centerline using a spline adjustment
+  if (param[["constraint"]][["confidence"]] < 1 && nrow(slice_metrics) > 4L)
   {
-    spline <- adjust_spline(segment_metrics)
+    spline <- adjust_spline(slice_metrics)
     spline <- sf::st_simplify(spline, dTolerance = 1)
     spline <- sf::st_set_crs(spline, sf::st_crs(las))
     sf::st_geometry(new_road) <- spline
   }
 
-  # Aggregate metrics for the whole road from each segment
-  metrics <- road_metrics(new_road, segment_metrics)
+  # Aggregate metrics for the whole road from each segment. We have one metric per 10 meter slices
+  # that are average to return a aggregated metrics
+  metrics <- road_metrics(new_road, slice_metrics)
   metrics[["SCORE"]] <- road_score(metrics, param)
-  metrics[["STATE"]] <- get_state(metrics[["SCORE"]])
+  metrics[["CLASS"]] <- get_state(metrics[["SCORE"]])
 
   # Merge the tables of attributes
   original_geometry <- sf::st_geometry(road)
@@ -275,14 +290,16 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   attribute_table <- cbind(sf::st_drop_geometry(road), metrics)
   attribute_table[[ngeom]] <- new_geometry
 
-  if (attribute_table[["STATE"]] > 2)
+  # If the class of the road is 3 or 4 it is supposed to do not exist. Thus the centerline found is
+  # likely to be irrelevant. We put back the original geometry to avoid doing worst than the original
+  if (attribute_table[["CLASS"]] > 2)
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
 
-  # For a redrawn road, check if the ends of the
+  # For a redrawn centerline, check if the ends of the
   # new road are suspiciously close to the edge of the caps
-  if (attribute_table[["STATE"]] %in% c(1,2))
+  if (attribute_table[["CLASS"]] %in% c(1,2))
   {
     start_ori <- lwgeom::st_startpoint(road)
     start_new <- lwgeom::st_startpoint(new_road)

@@ -10,7 +10,7 @@ Description: Functions to realign miss-positionned roads from a maintained map o
 License: GPL-3
 Encoding: UTF-8
 Imports: 
-    lidR,
+    lidR (>= 4.0.0),
     sf,
     zoo,
     stats,
