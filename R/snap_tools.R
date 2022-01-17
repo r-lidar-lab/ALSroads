@@ -13,6 +13,16 @@
 #' not missing.
 #'
 #' @return The same object as \code{roads} but with corrected ending such that roads are connected.
+#' @examples
+#' f <- system.file("extdata", "roads.gpkg", package="MFFProads")
+#'
+#' ref <- sf::st_read(f, layer = "original")  # input of measure_roads
+#' cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
+#' res <- st_snap_lines(cor, ref, field = "OBJECTID")
+#'
+#' plot(sf::st_geometry(ref), xlim = c(262600, 263200), ylim = c(5253200, 5253600), col = "red")
+#' plot(sf::st_geometry(cor), col = "blue",add = T)
+#' plot(sf::st_geometry(res), col = "darkgreen", add = T)
 #' @export
 st_snap_lines = function(roads, ref, tolerance = 30, field = NULL)
 {
@@ -127,7 +137,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
     dplyr::mutate(CLASS = rep(roads[["CLASS"]], 2))
 
   # Non-corrected roads
-  tb_endpoint <- prepare_data(roads_ori, TRUE)
+  tb_endpoint   <- prepare_data(roads_ori, TRUE)
   tb_startpoint <- prepare_data(roads_ori, FALSE)
 
   ls_heading <- lapply(sf::st_geometry(roads_ori), st_ends_heading)

@@ -140,6 +140,7 @@ slice_metrics = function(nlas_slice, param)
 #'
 #' The metrics useful are std. Z and avg Z. The profiles are smoothed. sd is computed
 #' with fast custom fsd function.
+#' @noRd
 compute_gnd_profiles = function(road_norm_pslice, res)
 {
   Z <- Y <-Classification <- ReturnNumber <- .N <- Xr <- NULL
