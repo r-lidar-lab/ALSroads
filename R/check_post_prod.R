@@ -2,8 +2,8 @@
 #'
 #' Check amplitude of differences between corrected and uncorrected roads
 #'
-#' @param roads  multiples lines (\code{sf} format). Corrected but unconnected roads.
-#' @param roads_ori  multiples lines (\code{sf} format). Original non-corrected but connected roads.
+#' @param roads  multiples lines (\code{sf} format). Corrected roads.
+#' @param roads_ori  multiples lines (\code{sf} format). Original non-corrected roads.
 #' @param field  character. Unique identifier field in both road datasets.
 #'
 #' @return data.frame with metrics about each roads.
@@ -51,10 +51,10 @@ check_road_differences <- function(roads, roads_ori, field)
 #' Connect the two roads by their ends to construct a polygon from which
 #' a ratio of its area over its perimeter will be calculated.
 #' The larger the value, the larger the differences between the two roads. It
-#' must be noted that in some edge cases, a low value doesn't mean low differences.
+#' must be noted that in some edge cases, a low value doesn't mean a low difference.
 #'
-#' @param road_ori  line (\code{sf} format). Original non-corrected road.
-#' @param road_cor  line (\code{sf} format). Corrected road.
+#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
+#' @param road_cor  line (\code{sf} or \code{sfc} format). Corrected road.
 #' @param graph  boolean. Whether of not to display graphics.
 #'
 #' @return numeric. Ratio of the area over the perimeter of the constructed polygon.
@@ -69,7 +69,10 @@ check_road_differences <- function(roads, roads_ori, field)
 #' ratio <- diff_area_perimeter(road_ori, road_cor, graph = TRUE)
 diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 {
-  if (nrow(road_ori) > 1 | nrow(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
+  road_ori <- sf::st_geometry(road_ori)
+  road_cor <- sf::st_geometry(road_cor)
+  
+  if (length(road_ori) > 1 | length(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
 
   # Extract vertices
   coords_ori <- sf::st_coordinates(road_ori)[,-3]
@@ -125,8 +128,8 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' each pair of points. The larger the quantiles are, the larger the differences
 #' between the two roads.
 #'
-#' @param road_ori  line (\code{sf} format). Original non-corrected road.
-#' @param road_cor  line (\code{sf} format). Corrected road.
+#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
+#' @param road_cor  line (\code{sf} or \code{sfc} format). Corrected road.
 #' @param step  numeric (distance unit). Interval on \code{road_ori} at which sample differences.
 #' @param graph  boolean. Whether of not to display graphics.
 #'
@@ -142,11 +145,10 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' p <- diff_along_road(road_ori, road_cor, graph = TRUE)
 diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
 {
-  if (nrow(road_ori) > 1 | nrow(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
-
   road_ori <- sf::st_geometry(road_ori)
   road_cor <- sf::st_geometry(road_cor)
   
+  if (length(road_ori) > 1 | length(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
   
   st_full_line_sample <- function(line, n_steps)
   {
