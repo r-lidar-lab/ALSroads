@@ -109,14 +109,10 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
     limits$x <- mean(limits$x) + c(-offset, offset)
     limits$y <- mean(limits$y) + c(-offset, offset)
 
-    plot_poly <- ggplot2::ggplot() +
-      ggplot2::geom_sf(data = poly, fill = "orange") +
-      ggplot2::geom_sf(data = road_ori, size = 1, color = "red") +
-      ggplot2::geom_sf(data = road_cor, size = 1, color = "darkgreen") +
-      ggplot2::coord_sf(xlim = limits$x, ylim = limits$y, datum = sf::st_crs(road_ori)) +
-      ggplot2::ggtitle(sprintf("Ratio area/perimeter: %.1f m²/m", ratio))
-    
-    print(plot_poly)
+    plot(poly, col = "orange", axes = TRUE, xlim=limits$x, ylim = limits$y)
+    plot(road_ori, lwd = 2, col = "red", add = TRUE)
+    plot(road_cor, lwd = 2, col = "darkgreen", add = TRUE)
+    title(sprintf("Ratio area/perimeter: %.1f m²/m", ratio))
   }
   return(ratio)
 }
@@ -196,22 +192,18 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     limits$x <- mean(limits$x) + c(-offset, offset)
     limits$y <- mean(limits$y) + c(-offset, offset)
 
-    plot_lines <- ggplot2::ggplot() +
-      ggplot2::geom_sf(data = road_ori, size = 1, color = "red") +
-      ggplot2::geom_sf(data = road_cor, size = 1, color = "darkgreen") +
-      ggplot2::geom_sf(data = lines, size = 0.5, color = "purple") +
-      ggplot2::coord_sf(xlim = limits$x, ylim = limits$y, datum = sf::st_crs(road_ori)) +
-      ggplot2::ggtitle("Pairwise points along roads")
 
-    plot_dots <- ggplot2::ggplot(df_dist, ggplot2::aes(x=idx, y=distance)) +
-      ggplot2::geom_point() +
-      ggplot2::geom_smooth(method = "loess", formula = "y ~ x", se = FALSE) +
-      ggplot2::geom_hline(yintercept = p) +
-      ggplot2::ggtitle("Pairwise distances along roads",
-                       subtitle = sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
-    
-    print(plot_lines)
-    print(plot_dots)
+    plot(road_ori, lwd = 2, col = "red", axes = TRUE, xlim=limits$x, ylim = limits$y)
+    plot(road_cor, lwd = 2, col = "darkgreen", add = TRUE)
+    plot(lines, col = "purple", add = TRUE)
+    title("Pairwise points along roads")
+
+
+    plot(df_dist, pch = 20)
+    lines(predict(loess(distance~idx, df_dist)), col = "blue", lwd = 2)
+    abline(h = p)
+    title("Pairwise distances along roads",
+          sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
   }
   return(p)
 }
