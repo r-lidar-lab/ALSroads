@@ -1,12 +1,70 @@
-grid_conductivity <- function(las, road, dtm, water = NULL)
+#' Computation of the least cost path
+#'
+#' The function computes the conductivity layers, compute the global conductivity, mask the waterbodies,
+#' add ending caps, generates location of point A and B, computes the least cost path and returns
+#' the new centerline geometry.
+#'
+#' @param las LAS. the point cloud extracted with a buffer from the centerline
+#' @param centerline sf, the road
+#' @param DTM,water DTM and water body mask
+#' @param list. parameters
+#'
+#' @noRd
+least_cost_path = function(las, centerline, dtm, water, param)
+{
+  # Compute the limit polygon and mask the DTM
+  hold <- sf::st_buffer(centerline, param[["extraction"]][["road_buffer"]])
+  dtm  <- raster::crop(dtm, hold)
+  dtm  <- raster::mask(dtm, hold)
+
+  # If the DTM has a resolution more than 1 m, aggregate to 1 m. No need of a 50 cm DTM. If the resolution
+  # is less than 1 meter, abort.
+  res <- round(raster::res(dtm)[1], 2)
+  if (res < 1)
+    dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
+  else if (res > 1)
+    stop("The DTM must have a resolution of 1 m or less.")
+
+  # Compute high resolution conductivity map (1 m). The function is capable to return all intermediate
+  # conductivity layer but it is for debugging and illustration purpose. We only need the final conductivity
+  sigma <- grid_conductivity(las, centerline, dtm, water, param, return_all = FALSE)$conductivity
+
+  # Compute low resolution conductivity with mask
+  sigma <- mask_conductivity(sigma, centerline, param)
+
+  # Compute start and end points
+  AB <- start_end_points(centerline, param)
+  A  <- AB$A
+  B  <- AB$B
+
+  # Compute the transition
+  trans <- transition(sigma)
+
+  # Find the path
+  verbose("Computing least cost path...\n")
+  path <- find_path(trans, centerline, A, B, param)
+
+  return(path)
+}
+
+#' Compute the conductivity raster sigma
+#'
+#' Compute the conductivity rasters sigma_s, sigma_e, sigma_r and so on and the final conductivity layer
+#' sigma
+#'
+#' @noRd
+grid_conductivity <- function(las, centerline, dtm, water = NULL, param, return_all = FALSE)
 {
   use_intensity <- "Intensity" %in% names(las@data)
+  display <- getOption("MFFProads.debug.finding")
 
   verbose("Computing conductivity maps...\n")
 
   nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
 
-  # Handle bridge case
+  # Handle bridge case:
+  # If a road crosses a water body it builds a bridge, i.e. a polygon in which we will
+  # force a conductivity of 1 later
   bridge = NULL
   if (!is.null(water) && length(water) > 0)
   {
@@ -15,300 +73,226 @@ grid_conductivity <- function(las, road, dtm, water = NULL)
     bbox <- suppressWarnings(sf::st_bbox(las))
     bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
     water <- sf::st_crop(water, bbox)
-    bridge <- sf::st_intersection(sf::st_geometry(road), water)
+    bridge <- sf::st_intersection(sf::st_geometry(centerline), water)
     if (length(bridge) > 0) bridge <- sf::st_buffer(bridge, 5)
   }
 
+  # Terrain metrics using the raster package (slope, roughness)
   terrain <- raster::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
-
-  dt <- system.time({
-  smin <- 5
-  smax <- 20
-  a <- -1/(smax-smin)
-  b <- -a*smax
   slope <- terrain$slope
-  conductivity_slope <- slope
-  conductivity_slope[] <- a*slope[] + b
-  conductivity_slope[ slope < smin] <- 1
-  conductivity_slope[ slope > smax] <- 0
+  roughness <- terrain$roughness
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_slope, col = viridis::viridis(25), main = "Conductivity slope")
-  })
-  verbose("   - Slope conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  # Slope-based conductivity
+  s <- param$conductivity$s
+  sigma_s   <- dtm
+  sigma_s[] <- activation(slope[], s, "piecewise-linear", asc = FALSE)
 
+  if (display) raster::plot(sigma_s, col = viridis::viridis(25), main = "Conductivity slope")
+  verbose("   - Slope conductivity map \n")
 
-  dt <- system.time({
-  rough <- terrain$roughness
-  conductivity_rough <- rough
-  conductivity_rough[ rough < 0.2 ] <- 1
-  conductivity_rough[ rough >= 0.2 ] <- 1/2
-  conductivity_rough[ rough > 0.3] <- 0
+  # Roughness-based conductivity
+  r <- param$conductivity$r
+  sigma_r   <- dtm
+  sigma_r[] <- activation(roughness[], r, "thresholds", asc = FALSE)
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_rough, col = viridis::viridis(3), main = "Conductivity roughness")
+  if (display) raster::plot(sigma_r, col = viridis::viridis(3), main = "Conductivity roughness")
+  verbose("   - Roughness conductivity map\n")
 
-  })
-  verbose("   - Roughness conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  # Edge-based conductivity
+  e    <- param$conductivity$e
+  slop <- raster::as.matrix(slope)
+  sobl <- sobel(slop)
+  sigma_e <- dtm
+  sigma_e[] <- sobl
+  sigma_e[] <- activation(sigma_e[], e, "thresholds", asc = FALSE)
 
-  dt <- system.time({
-  edge <- slope
-  tmp <- raster::as.matrix(edge)
-  tmp <- sobel(tmp)
-  edge[]<- tmp
-  #raster::plot(edge, col = viridis::viridis(30), main = "Sobel")
+  if (display) raster::plot(sigma_e, col = viridis::viridis(3), main = "Conductivity Sobel edges")
+  verbose("   - Sobel conductivity map\n")
 
-  conductivity_edge <- edge
-  conductivity_edge[ edge < 15 ] <- 1
-  conductivity_edge[ edge >= 15 ] <- 1/2
-  conductivity_edge[ edge > 40 ] <- 0
-
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_edge, col = viridis::viridis(3), main = "Conductivity Sobel edges")
-  })
-  verbose("   - Sobel conductivity map in ", round(dt[3],2), "s \n", sep = "")
-
+  # Intensity-based conductivity
   if (use_intensity)
   {
-  dt <- system.time({
-  Intensity <- NULL
-  q <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
-  nlas@data[Intensity > 2L*q, Intensity := 2L*q]
+    q <- param$conductivity$q
 
-  Z = nlas$Z
-  nlas@data[["Z"]] <-  nlas@data[["Intensity"]] # trick to use fast C_rasterize
+    # Detect outliers of intensity and change their value. This is not perfect but avoid many troubles
+    Intensity <- NULL
+    outliers <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
+    nlas@data[Intensity > 2L*outliers, Intensity := 2L*outliers]
 
-
-  if (utils::packageVersion("lidR") < "4.0.0")
-  {
-    lay   <- lidR:::rOverlay(nlas, dtm, buffer = 0)
-    i_max <- lidR:::C_rasterize(nlas, lay, FALSE, 1L)
-    i_min <- lidR:::C_rasterize(nlas, lay, FALSE, 2L)
-    imin <- lay
-    imax <- lay
-    imin[] <- i_min
-    imax[] <- i_max
-  }
-  else
-  {
+    # Switch Z and Intensity trick to use fast lidR internal function
+    Z <- nlas$Z
+    nlas@data[["Z"]] <-  nlas@data[["Intensity"]]
     imax <- lidR:::rasterize_fast(nlas, dtm, 0, "max")
     imin <- lidR:::rasterize_fast(nlas, dtm, 0, "min")
-  }
+    irange <- imax - imin
+    nlas@data[["Z"]] <- Z
 
-  irange <- imax - imin
-  nlas@data[["Z"]] <- Z
+    if (display) raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
+    th <- stats::quantile(irange[], probs = q, na.rm = TRUE)
+    sigma_i <- dtm
+    sigma_i[] <- activation(irange[], th, "thresholds", asc = FALSE)
 
-  val <- irange[]
-  th <- stats::quantile(val, probs = c(0.1, 0.25, 0.25), na.rm = TRUE)
-  conductivity_intensity <- irange
-  conductivity_intensity[ irange >= 0 ] <- 1
-  conductivity_intensity[ irange > th[1] ] <- 1/2
-  conductivity_intensity[ irange > th[2] ] <- 1/4
-  conductivity_intensity[ irange > th[3]] <- 0
-
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_intensity, col = viridis::viridis(3), main = "Conductivity intensity")
-  })
-  verbose("   - Intensity conductivity map in ", round(dt[3],2), "s \n", sep = "")
+    if (display) raster::plot(sigma_i, col = viridis::viridis(3), main = "Conductivity intensity")
+    verbose("   - Intensity conductivity map\n")
   }
   else
   {
-    conductivity_intensity <- rOverlay(nlas, dtm, buffer = 0)
-    conductivity_intensity[] <- 0
+    sigma_i   <- dtm
+    sigma_i[] <- 0
   }
 
-  dt <- system.time({
+  # CHM-based conductivity
+  h <- param$conductivity$h
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
-  #raster::plot(chm, col = height.colors(50))
+  sigma_chm <- dtm
+  sigma_chm[] <- activation(chm[], h, "thresholds", asc = FALSE)
 
-  conductivity_chm <- chm
-  conductivity_chm[ chm < 0.5 ] <- 1
-  conductivity_chm[ chm >= 0.5 ] <- 1/2
-  conductivity_chm[ chm > 1 ] <- 0
+  if (display) raster::plot(sigma_chm, col = viridis::inferno(3), main = "Conductivity CHM")
+  verbose("   - CHM conductivity map\n")
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_chm, col = viridis::inferno(3), main = "Conductivity CHM")
-  })
-  verbose("   - CHM conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  # Lowpoints-based conductivity
+  # Check the presence/absence of lowpoints
+  z1 <- 1
+  z2 <- 3
+  th <- 1
 
+  tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
+  lp  <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
+  sigma_lp <- dtm
+  sigma_lp[] <- activation(lp[], th, "thresholds", asc = FALSE)
 
-  dt <- system.time({
-  tmp <- lidR::filter_poi(nlas, Z > 1, Z < 3)
-  d12 <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
-  d12[d12 <= 1] <- 0
-  d12[d12 >= 1] <- 1
-  d12 <- 1-d12
+  if (display) raster::plot(sigma_lp, col = viridis::inferno(3), main = "Bottom layer")
+  verbose("   - Bottom layer conductivity map\n")
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(d12, col = viridis::inferno(3), main = "Bottom layer")
-  })
-  verbose("   - Bottom layer conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  # Density-based conductivity
+  # Notice that the paper makes no mention of smoothing
+  q <- param$conductivity$d
 
-
-  dt <- system.time({
   gnd <- lidR::filter_ground(nlas)
-  d <- lidR::grid_density(gnd, dtm)
-  M <- matrix(1,3,3)
+  d   <- lidR::grid_density(gnd, dtm)
+  M   <- matrix(1,3,3)
   M[2,2] <- 2
-  d <- raster::focal(d,M, mean, padValue = NA, na.rm = T, pad = T)
+  d <- raster::focal(d, M, mean, padValue = NA, na.rm = T, pad = T)
 
   val <- d[]
   val <- val[val > 0]
-  th <- stats::quantile(val, probs = c(0.25, 0.75, 0.95))
-  conductivity_density <- d
-  conductivity_density[ d == 0 ] <- 0
-  conductivity_density[ d > th[1] ] <- 1/4
-  conductivity_density[ d > th[2] ] <- 1/2
-  conductivity_density[ d > th[3]] <- 1
+  th  <- stats::quantile(val, probs = q)
+  sigma_d <- dtm
+  sigma_d[] <- activation(d[], th, "thresholds")
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_density, col = viridis::inferno(3), main = "Conductivity density")
-  })
-  verbose("   - Density conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  if (display)  raster::plot(sigma_d, col = viridis::inferno(3), main = "Conductivity density")
+  verbose("   - Density conductivity map\n")
 
 
-  dt <- system.time({
+  # Final conductivity sigma
   max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1 + as.numeric(use_intensity))
-  conductivity_all <- conductivity_slope * d12 * conductivity_edge * (2 * conductivity_density + conductivity_chm + conductivity_rough + conductivity_intensity)
-  conductivity_all <- conductivity_all/max_coductivity
-  })
-  verbose("   - Global conductivity map in ", round(dt[3],2), "s \n", sep = "")
+  sigma <- sigma_s *sigma_lp * sigma_e * (2 * sigma_d + sigma_chm + sigma_r + sigma_i)
+  sigma <- sigma/max_coductivity
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity_all, col = viridis::inferno(15), main = "Conductivity 1m")
+  verbose("   - Global conductivity map\n")
 
-  s <- raster::stack(slope,
-                     rough,
-                     conductivity_slope,
-                     conductivity_rough,
-                     conductivity_edge,
-                     chm,
-                     conductivity_chm,
-                     d,
-                     conductivity_density,
-                     irange,
-                     conductivity_intensity,
-                     d12,
-                     conductivity_all)
-  names(s) <- c("slope",
-                "roughness",
-                "conductivity_slope",
-                "conductivity_roughness",
-                "conductivity_edge",
-                "chm",
-                "conductivity_chm",
-                "density",
-                "conductivity_density",
-                "intensity",
-                "conductivity_intensity",
-                "conductivity_bottom",
-                "conductivity")
+  if (display) raster::plot(sigma, col = viridis::inferno(15), main = "Conductivity 1m")
+
+  # The output is sigma but we can also return everything to illustrate the paper
+  if (!return_all)
+  {
+    out <- raster::stack(sigma)
+    names(out) <- "conductivity"
+  }
+  else
+  {
+    out <- raster::stack(slope, roughness, sigma_s, sigma_r, sigma_e, chm, sigma_chm, d, sigma_d, irange, sigma_i, sigma_lp, sigma)
+    names(out) <- c("slope", "roughness", "conductivity_slope", "conductivity_roughness", "conductivity_edge", "chm", "conductivity_chm", "density", "conductivity_density", "intensity", "conductivity_intensity", "conductivity_bottom", "conductivity")
+  }
 
   if (!is.null(water) && length(water) > 0)
-    s <- raster::mask(s, sf::as_Spatial(water), inverse = TRUE)
+    out <- raster::mask(out, sf::as_Spatial(water), inverse = TRUE)
 
   if (length(bridge) > 0)
   {
-    cells =  raster::cellFromPolygon(s$conductivity, sf::as_Spatial(bridge))
-    cells = unlist(cells)
-    tmp = s$conductivity
-    tmp[cells] = 1
-    s$conductivity = tmp
+    cells <- raster::cellFromPolygon(out$conductivity, sf::as_Spatial(bridge))
+    cells <- unlist(cells)
+    tmp   <- out$conductivity
+    tmp[cells] <- 1
+    out$conductivity <- tmp
 
-    if (getOption("MFFProads.debug.finding"))
-      raster::plot(s$conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
+    if (display) raster::plot(out$conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
   }
 
-  return(s)
+  return(out)
 }
 
-mask_conductivity <- function(conductivity, road, param)
+#' Aggregate the conductivity and modify some pixels
+#'
+#' Aggregate the conductivity  to a resolution of two meters and update some pixels by masking
+#' the map with the bounding polygon, multiplying by a distance to road cost factor (not described
+#' in the paper) and add terminal caps conductive pixels to allow driving from the point A and B
+#' further apart the road
+#' @noRd
+mask_conductivity <- function(conductivity, centerline, param)
 {
   verbose("Computing conductivity masks...\n")
 
-  poly1 <- sf::st_buffer(road, param$extraction$road_buffer, endCapStyle = "FLAT")
-  hull  <- sf::st_buffer(road, param$extraction$road_buffer)
-  caps  <- make_caps(road, param)
-  poly4 <- sf::st_buffer(road, 1)
-
-  dt <- system.time({
+  # Aggregation and boundary masking
+  hull <- sf::st_buffer(centerline, param$extraction$road_buffer)
   conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
   conductivity <- raster::mask(conductivity, hull)
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
-  })
-  verbose("   - Aggregation and masking in ", round(dt[3],2), "s \n", sep = "")
+  if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
+  verbose("   - Aggregation and masking\n")
 
-  dt <- system.time({
-  # Confidence factor
-  f <- fasterize::fasterize(poly4, conductivity)
+  # Penalty factor based on distance-to-road.
+  # Actually small penalty since this part was not very successful. Not described in the paper.
+  # Could maybe be removed. Yet it might be useful if putting more constraints
+  p <- sf::st_buffer(centerline, 1)
+  f <- fasterize::fasterize(p, conductivity)
   f <- raster::distance(f)
-
   f <- raster::mask(f, hull)
   fmin <- min(f[], na.rm = T)
   fmax <- max(f[], na.rm = T)
   target_min <- 1-param[["constraint"]][["confidence"]]
   f <- (1-(((f - fmin) * (1 - target_min)) / (fmax - fmin)))
+  conductivity <- f*conductivity
 
-  if (getOption("MFFProads.debug.finding"))
-    raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
-  })
-  verbose("   - Road rasterization and distance factor map in ", round(dt[3],2), "s \n", sep = "")
+  if (getOption("MFFProads.debug.finding")) raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
+  verbose("   - Road rasterization and distance factor map\n")
 
+  # Set a conductivity of 1 in the caps and 0 on the outer half ring link in figure 6
+  # We could use raster::cellFromPolygon but it is slow. This workaround using lidR is complex butfast.
+  # Maybe using terra we could simplify the code.
+  caps <- make_caps(centerline, param)
+  xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
+  xy <- as.data.frame(xy)
+  xy$z <- 0
+  names(xy) <- c("X", "Y", "Z")
+  xy <- lidR::LAS(xy, lidR::LASheader(xy))
+  lidR::projection(xy) <- sf::st_crs(caps$caps)
 
-  dt <- system.time({
-    # could use raster::cellFromPolygon but is slow
-    conductivity <- f*conductivity
+  res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
+  conductivity[res] <- 1
+  res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
+  conductivity[res] <- 0
 
-    xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
-    xy <- as.data.frame(xy)
-    xy$z <- 0
-    names(xy) <- c("X", "Y", "Z")
-    xy <- lidR::LAS(xy, lidR::LASheader(xy))
-    lidR::projection(xy) <- sf::st_crs(caps$caps)
-
-    if (utils::packageVersion("lidR") < "4.0.0")
-    {
-
-      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$caps)), 1)
-      conductivity[res] <- 1
-      res <- lidR:::C_in_polygon(xy, sf::st_as_text(sf::st_geometry(caps$shields)), 1)
-      conductivity[res] <- 0
-    }
-    else
-    {
-      res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
-      conductivity[res] <- 1
-      res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
-      conductivity[res] <- 0
-    }
-
-    if (getOption("MFFProads.debug.finding"))
-      raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
-  })
-  verbose("   - Add full conductivity end blocks in ", round(dt[3],2), "s \n", sep = "")
-
+  if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
+  verbose("   - Add full conductivity end blocks\n")
 
   return(conductivity)
 }
 
-start_end_points = function(road, param)
+start_end_points = function(centerline, param)
 {
-  poly1 <- sf::st_buffer(road, param$extraction$road_buffer, endCapStyle = "FLAT")
-  start <- lwgeom::st_startpoint(road)
-  end   <- lwgeom::st_endpoint(road)
+  poly1 <- sf::st_buffer(centerline, param$extraction$road_buffer, endCapStyle = "FLAT")
+  start <- lwgeom::st_startpoint(centerline)
+  end   <- lwgeom::st_endpoint(centerline)
   start <- sf::st_buffer(start, param$extraction$road_buffer)
-  end <- sf::st_buffer(end, param$extraction$road_buffer)
+  end   <- sf::st_buffer(end, param$extraction$road_buffer)
   start <- sf::st_difference(start, poly1)
-  end <- sf::st_difference(end, poly1)
-  A <- sf::st_centroid(start)
-  B <- sf::st_centroid(end)
-  A <-sf::st_coordinates(A)
-  B <- sf::st_coordinates(B)
+  end   <- sf::st_difference(end, poly1)
+  A     <- sf::st_centroid(start)
+  B     <- sf::st_centroid(end)
+  A     <- sf::st_coordinates(A)
+  B     <- sf::st_coordinates(B)
   return(list(A = A, B = B))
 }
 
@@ -316,22 +300,18 @@ transition <- function(conductivity)
 {
   verbose("Computing graph map...\n")
 
-  dt <- system.time({
   trans <- gdistance::transition(conductivity, transitionFunction = mean, directions = 8)
-  })
-  verbose("   - Transition graph in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Transition graph\n")
 
-  dt <- system.time({
   trans <- gdistance::geoCorrection(trans)
-  })
-  verbose("   - Geocorrection graph in ", round(dt[3],2), "s \n", sep = "")
+  verbose("   - Geocorrection graph\n")
 
   return(trans)
 }
 
-find_path = function(trans, road, A, B, param)
+find_path = function(trans, centerline, A, B, param)
 {
-  caps  <- make_caps(road, param)$caps
+  caps <- make_caps(centerline, param)$caps
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
@@ -339,7 +319,7 @@ find_path = function(trans, road, A, B, param)
   if (is.infinite(cost))
   {
     verbose("    - Impossible to reach the end of the road\n")
-    path <- sf::st_geometry(road)
+    path <- sf::st_geometry(centerline)
     path <- sf::st_as_sf(path)
     path$CONDUCTIVITY <- 0
     return(path)
@@ -349,14 +329,12 @@ find_path = function(trans, road, A, B, param)
   path <- sf::st_as_sf(path)
   len  <- sf::st_length(path)
   path <- sf::st_simplify(path, dTolerance = 3)
-  path <- sf::st_set_crs(path, sf::NA_crs_) |> sf::st_set_crs(sf::st_crs(road))
+  path <- sf::st_set_crs(path, sf::NA_crs_)
+  path <- sf::st_set_crs(path, sf::st_crs(centerline))
   path <- sf::st_difference(path, caps)
-  #path$cost <- cost
-  #path$cost_per_unit <- cost/len
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
 
-  if (getOption("MFFProads.debug.finding"))
-    plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
+  if (getOption("MFFProads.debug.finding")) plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
 
   return(path)
 }
@@ -381,13 +359,13 @@ sobel <- function(img)
   edata
 }
 
-make_caps <- function(road, param)
+make_caps <- function(centerline, param)
 {
-  XY <- sf::st_coordinates(road)[,1:2]
+  XY <- sf::st_coordinates(centerline)[,1:2]
   n <- nrow(XY)
   buf <- param[["extraction"]][["road_buffer"]]
 
-  angles <- st_angles(road)
+  angles <- st_angles(centerline)
   start_angle <- angles[1]
   end_angle <- angles[length(angles)]
 
@@ -397,15 +375,15 @@ make_caps <- function(road, param)
   jj <- n-1
   if (end_angle > 90) jj <- n-2
 
-  start <- sf::st_sfc(sf::st_linestring(XY[c(1,ii),]), crs = sf::st_crs(road))
-  end <- sf::st_sfc(sf::st_linestring(XY[c(jj,n),]), crs = sf::st_crs(road))
+  start <- sf::st_sfc(sf::st_linestring(XY[c(1,ii),]), crs = sf::st_crs(centerline))
+  end <- sf::st_sfc(sf::st_linestring(XY[c(jj,n),]), crs = sf::st_crs(centerline))
 
   poly1 <- sf::st_geometry(sf::st_buffer(start, buf, endCapStyle = "FLAT"))
   poly2 <- sf::st_geometry(sf::st_buffer(end,   buf, endCapStyle = "FLAT"))
-  poly3 <- sf::st_geometry(sf::st_buffer(road, buf))
+  poly3 <- sf::st_geometry(sf::st_buffer(centerline, buf))
 
-  A <- lwgeom::st_startpoint(road)
-  B <- lwgeom::st_endpoint(road)
+  A <- lwgeom::st_startpoint(centerline)
+  B <- lwgeom::st_endpoint(centerline)
 
   cap_A <- sf::st_buffer(A, buf)
   cap_B <- sf::st_buffer(B, buf)
@@ -428,9 +406,8 @@ make_caps <- function(road, param)
   caps <- sf::st_union(caps)
   shield <- sf::st_difference(caps, shield)
 
-  sf::st_crs(caps) <- sf::st_crs(road)
-  sf::st_crs(shield) <- sf::st_crs(road)
+  sf::st_crs(caps) <- sf::st_crs(centerline)
+  sf::st_crs(shield) <- sf::st_crs(centerline)
 
   return(list(caps = caps, shields = shield))
 }
-

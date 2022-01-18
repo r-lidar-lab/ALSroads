@@ -9,11 +9,14 @@ st_check_junctions(roads, tolerance = 8)
 \arguments{
 \item{roads}{multiples lines (\code{sf} format)}
 
-\item{tolerance}{numeric (distance unit). Tolerance value used to check if some road endings should have been snapped together.}
+
+\item{tolerance}{numeric (distance unit). Tolerance value used to check if some road endings should
+have been snapped together.}
 }
 \value{
-Polygon object (\code{sf} format) corresponding to circles of \code{tolerance} radius around the locations where
-junctions might be missing.
+Polygon object (\code{sf} format) corresponding to circles of \code{tolerance} radius
+around the locations where junctions might be missing.
+
 }
 \description{
 Check if some road endings are close enough to be considered as being potentially part of a junction.
@@ -23,21 +26,40 @@ with the same \code{tolerance} value and the same road network.
 \examples{
 library(sf)
 
-network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
 
-roads <- sf::st_read(network, "invalid_topology")
+network   <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+network   <- st_read(network, "invalid_topology")
+junctions <- st_check_junctions(network)
 
-junctions <- st_check_junctions(roads)
+plot(st_geometry(network), axes = TRUE)
+plot(st_geometry(junctions), add = TRUE, border = "red")
 
 par(mfrow = c(1,2))
 for (k in 1:2)
 {
-  junction <- junctions[k,]
-  bbox <- st_bbox(junction)
-  plot(st_geometry(junctions), col = "cyan", xlim = c(bbox[c("xmin", "xmax")]), ylim = c(bbox[c("ymin", "ymax")]))
-  plot(st_geometry(roads), col = "red", lwd = 3, add = TRUE)
-  title(main = k,
-        sub = paste0("\nConnected: ", junction[["nb_connected"]],
-                     "\nUnconnected: ", junction[["nb_unconnected"]]))
+  junc <- junctions[k,]
+  bbox <- st_bbox(junc)
+  xlim <- bbox[c("xmin", "xmax")]
+  ylim <- bbox[c("ymin", "ymax")]
+  sub  <- paste0("Connected: ", junc[["nb_connected"]], "\nUnconnected: ", junc[["nb_unconnected"]])
+  plot(st_geometry(junctions), col = "cyan", xlim = xlim, ylim = ylim, axes = TRUE)
+  plot(st_geometry(network), col = "red", lwd = 3, add = TRUE)
+  title(main = k, sub = sub)
+}
+
+# simple snapping (see ?st_snap_lines)
+network <- st_snap_lines(network)
+
+par(mfrow = c(1,2))
+for (k in 1:2)
+{
+  junc <- junctions[k,]
+  bbox <- st_bbox(junc)
+  xlim <- bbox[c("xmin", "xmax")]
+  ylim <- bbox[c("ymin", "ymax")]
+  sub  <- paste0("Connected: ", junc[["nb_connected"]], "\nUnconnected: ", junc[["nb_unconnected"]])
+  plot(st_geometry(junctions), col = "cyan", xlim = xlim, ylim = ylim, axes = TRUE)
+  plot(st_geometry(network), col = "red", lwd = 3, add = TRUE)
+  title(main = k, sub = sub)
 }
 }

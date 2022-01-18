@@ -22,6 +22,15 @@ terrain = list(
   max_elevation_ground_points = 0.15
 )
 
+conductivity = list(
+  s = c(5, 20),
+  r = c(0.2, 0.3),
+  e = c(15, 40),
+  q = c(0.1, 0.25, 0.5),
+  h = c(0.5, 1),
+  d = c(0.25, 0.75, 0.95)
+)
+
 # Parameters to evaluate the state of a section
 state = list(
   percentage_veg_thresholds = c(10,40),
@@ -33,6 +42,7 @@ state = list(
 param = list(
   extraction = extraction,
   constraint = constraint,
+  conductivity = conductivity,
   embankments = embankments,
   terrain = terrain,
   state = state

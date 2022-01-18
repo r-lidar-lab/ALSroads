@@ -13,18 +13,19 @@ st_check_crossings(roads)
 Point object (\code{sf} format) corresponding to intersection points of crossing roads.
 }
 \description{
-Check if some roads are crossing elsewhere than at their ends. These occurences should be fixed as roads crossing
-each other should be split at their intersection point in a valid topological network.
+Check if some roads are crossing elsewhere than at their ends. These occurences should be fixed
+as roads crossing each other should be split at their intersection point in a valid topological
+network.
 }
 \examples{
 library(sf)
 
 network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
 
-roads <- sf::st_read(network, "invalid_topology")
+network <- sf::st_read(network, "invalid_topology")
 
-crossings <- st_check_crossings(roads)
+crossings <- st_check_crossings(network)
 
-plot(st_geometry(roads), col = "red") # Inspected roads
+plot(st_geometry(network), axes = TRUE) # Inspected roads
 plot(st_geometry(crossings), col = "blue", add = TRUE) # Crossings to fix
 }

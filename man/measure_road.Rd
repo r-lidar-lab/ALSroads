@@ -42,8 +42,10 @@ detect bridges above water.}
 }
 \value{
 An sf object similar to the input with additional attributes and an updated geometry. If
-the state is "likely decommissioned" or "decommissioned" the original geometry is preserved to
-prevent adding more error.
+the class is 3 or 4 the original geometry is preserved to prevent adding more error. The new attributes
+are ROADWITH, DRIVABLEWIDTH, PERCABOVEROAD (percentage of points between 0.5 and 5 meter above the road)
+SHOULDERS (average number of shoulders found), SINUOSITY, CONDUCTIVITY (conductivity per linear meters)
+SCORE (a road state score) and CLASS (4 classes derived from the SCORE). See references
 }
 \description{
 From a reference road (line), extracts the line with a buffer from the point cloud and computes
@@ -108,4 +110,8 @@ options(MFFProads.debug.measuring = FALSE)
 options(MFFProads.debug.metrics = TRUE)
 res <- measure_road(ctg, road, dtm)
 }
+}
+\references{
+Roussel, J-R, Achim A (2022). Correction, update, and enhancement of vectorial forestry
+road map using ALS data, a pathfinder and seven metrics.
 }
