@@ -9,15 +9,6 @@ get_heading <- function(from, to)
   heading <- atan2(Ay-By, Ax-Bx)
 }
 
-
-# Smooth adjacent costs with a mean moving windows
-ma <- function(x, n = 3)
-{
-  if (anyNA(x)) x <- zoo::na.approx(x, na.rm = FALSE)
-  as.numeric(stats::filter(x, rep(1 / n, n), sides = 2))
-}
-
-
 #' Drive along an unknowned road
 #'
 #' Attempt to drive along an unknowned road in a conductivity raster starting
