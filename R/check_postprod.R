@@ -81,8 +81,8 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 
   # Adjust coordinates in order to create a valid sequence
   # of vertices for a polygon
-  dist_to_start <- dist(rbind(coords_ori[1,], coords_cor[1,]))[1]
-  dist_to_end <- dist(rbind(coords_ori[1,], coords_cor[nrow(coords_cor),]))[1]
+  dist_to_start <- stats::dist(rbind(coords_ori[1,], coords_cor[1,]))[1]
+  dist_to_end <- stats::dist(rbind(coords_ori[1,], coords_cor[nrow(coords_cor),]))[1]
   closest_vertex <- which.min(c(dist_to_start, dist_to_end))
 
   if (closest_vertex == 1) coords_cor <- apply(coords_cor, 2, rev)
@@ -112,7 +112,7 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
     plot(poly, col = "orange", axes = TRUE, xlim=limits$x, ylim = limits$y)
     plot(road_ori, lwd = 2, col = "red", add = TRUE)
     plot(road_cor, lwd = 2, col = "darkgreen", add = TRUE)
-    title(sprintf("Ratio area/perimeter: %.1f m²/m", ratio))
+    graphics::title(sprintf("Ratio area/perimeter: %.1f m\u00b2/m", ratio))
   }
   return(ratio)
 }
@@ -172,7 +172,7 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     diag() |>
     as.numeric()
 
-  p <- quantile(dist_step, probs = c(0.5, 0.90, 1))
+  p <- stats::quantile(dist_step, probs = c(0.5, 0.90, 1))
 
 
   # Display graphical representation of the differences
@@ -185,8 +185,7 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
       lapply(function(x) { sf::st_linestring(rbind(coords_ori[x,], coords_cor[x,])) }) |>
       sf::st_sfc(crs = sf::st_crs(road_ori))
 
-    df_dist <- data.frame(idx = 1:length(dist_step),
-                          distance = dist_step)
+    df_dist <- data.frame(idx = 1:length(dist_step), distance = dist_step)
 
     coords <- rbind(coords_ori, coords_cor)
     limits <- list(x = range(coords[,1]), y = range(coords[,2]))
@@ -195,18 +194,15 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     limits$x <- mean(limits$x) + c(-offset, offset)
     limits$y <- mean(limits$y) + c(-offset, offset)
 
-
     plot(road_ori, lwd = 2, col = "red", axes = TRUE, xlim=limits$x, ylim = limits$y)
     plot(road_cor, lwd = 2, col = "darkgreen", add = TRUE)
     plot(lines, col = "purple", add = TRUE)
-    title("Pairwise points along roads")
-
+    graphics::title("Pairwise points along roads")
 
     plot(df_dist, pch = 20)
-    lines(predict(loess(distance~idx, df_dist)), col = "blue", lwd = 2)
-    abline(h = p)
-    title("Pairwise distances along roads",
-          sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
+    graphics::lines(stats::predict(stats::loess(distance~idx, df_dist)), col = "blue", lwd = 2)
+    graphics::abline(h = p)
+    graphics::title("Pairwise distances along roads", sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
   }
 
   return(p)

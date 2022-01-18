@@ -6,9 +6,9 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   dd2 = profiles_veg
   X = road_norm_segment$Y
   Z = road_norm_segment$Z
-  col = lidR:::set.colors(Z, height.colors(25))
+  col = lidR:::set.colors(Z, lidR::height.colors(25))
   col[road_norm_segment$Classification == 2] = "purple"
-  cex = rep(0.3, lidR::npoints(las))
+  cex = rep(0.3, lidR::npoints(road_norm_segment))
   cex[road_norm_segment$Classification == 2] = 0.5
 
   plot(X, Z, asp = 1, cex = cex, pch = 19, col = col, ylim = c(min(c(-7,Z)), max(15, max(Z))), xlab = "X (m)", ylab = "Z (m)")
