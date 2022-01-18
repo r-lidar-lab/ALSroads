@@ -9,10 +9,10 @@ get_heading <- function(from, to)
   heading <- atan2(Ay-By, Ax-Bx)
 }
 
-#' Drive along an unknowned road
+#' Drive along an unknown road
 #'
-#' Attempt to drive along an unknowned road in a conductivity raster starting
-#' only with a small piece of road segment pointing in the right direction.
+#' Attempt to drive along an unknown road in a conductivity raster starting only with a small piece
+#' of road segment pointing in the right direction.
 #'
 #' @param start_line  line (\code{sf} format)
 #' @param conductivity  raster (\code{terra} format)
@@ -21,7 +21,8 @@ get_heading <- function(from, to)
 #' @param cost_max  numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
 #' If no value is provided \code{radius * 6} will be.
 #'
-#' @return list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector of cost at each invidual vertices of the line.
+#' @return list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector
+#' of cost at each invidual vertices of the line.
 #' @export
 #' @examples
 #' library(terra)

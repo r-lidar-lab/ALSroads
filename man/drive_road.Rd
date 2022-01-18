@@ -2,7 +2,7 @@
 % Please edit documentation in R/drive_road.R
 \name{drive_road}
 \alias{drive_road}
-\title{Drive along an unknowned road}
+\title{Drive along an unknown road}
 \usage{
 drive_road(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
 }
@@ -19,11 +19,12 @@ drive_road(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
 If no value is provided \code{radius * 6} will be.}
 }
 \value{
-list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector of cost at each invidual vertices of the line.
+list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector
+of cost at each invidual vertices of the line.
 }
 \description{
-Attempt to drive along an unknowned road in a conductivity raster starting
-only with a small piece of road segment pointing in the right direction.
+Attempt to drive along an unknown road in a conductivity raster starting only with a small piece
+of road segment pointing in the right direction.
 }
 \examples{
 library(terra)
