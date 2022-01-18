@@ -29,13 +29,15 @@ only with a small piece of road segment pointing in the right direction.
 library(terra)
 library(sf)
 
-conductivity <- rast("conductivity.tif")
-start_line <- st_read("start_line.gpkg")
+conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
+start_line <- system.file("extdata", "start_line.gpkg", package = "MFFProads")
+conductivity <- rast(conductivity)
+start_line <- st_read(start_line)
 
 res <- drive_road(start_line, conductivity)
 
-raster::plot(conductivity, col = viridis::viridis(50))
-raster::plot(res$line, add = TRUE, col = "red", lwd = 2)
-raster::plot(start_line, add = TRUE, col = "green", lwd = 3)
+plot(conductivity, col = viridis::viridis(50))
+plot(res$line, add = TRUE, col = "red", lwd = 2)
+plot(start_line, add = TRUE, col = "green", lwd = 3)
 plot(res$cost, type = "l")
 }

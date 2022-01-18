@@ -21,7 +21,6 @@ network.
 library(sf)
 
 network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
-
 network <- sf::st_read(network, "invalid_topology")
 
 crossings <- st_check_crossings(network)

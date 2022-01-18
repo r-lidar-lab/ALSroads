@@ -36,19 +36,22 @@ ma <- function(x, n = 3)
 #' library(terra)
 #' library(sf)
 #'
-#' conductivity <- rast("conductivity.tif")
-#' start_line <- st_read("start_line.gpkg")
-#' 
+#' conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
+#' start_line <- system.file("extdata", "start_line.gpkg", package = "MFFProads")
+#' conductivity <- rast(conductivity)
+#' start_line <- st_read(start_line)
+#'
 #' res <- drive_road(start_line, conductivity)
-#' 
-#' raster::plot(conductivity, col = viridis::viridis(50))
-#' raster::plot(res$line, add = TRUE, col = "red", lwd = 2)
-#' raster::plot(start_line, add = TRUE, col = "green", lwd = 3)
+#'
+#' plot(conductivity, col = viridis::viridis(50))
+#' plot(res$line, add = TRUE, col = "red", lwd = 2)
+#' plot(start_line, add = TRUE, col = "green", lwd = 3)
 #' plot(res$cost, type = "l")
 drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
 {
   if (is.null(cost_max)) cost_max <- radius * 6
-  
+
+
   resolution <- terra::res(conductivity)
   if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
   resolution <- resolution[1]
@@ -121,7 +124,7 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
     M <- data.frame(X,Y)
     ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
       sf::as_Spatial()
-    
+
     # Check if some ends fall outside of the cropped conductivity raster
     val <- terra::extract(conductivity_crop, M)
     if (any(is.nan(val[,2])))
@@ -131,7 +134,7 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
         matrix(ncol = 2, byrow = TRUE) |>
         sf::st_linestring() |>
         sf::st_sfc(crs = sf::st_crs(start_line))
-      
+
       aoi <- line |>
         st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
         sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
@@ -217,28 +220,28 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
 #'
 #' dir <- system.file("extdata", "", package="MFFProads")
 #' path_dtm <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
-#' 
+#'
 #' ctg <- readLAScatalog(dir)
 #' dtm <- rast(path_dtm)
-#' 
+#'
 #' # Define parameters for grid of tiles
 #' # Internal buffer is only to mess things up a bit
 #' aoi <- st_bbox(ctg) |>
 #'   st_as_sfc() |>
 #'   st_buffer(-14.7)
 #' size <- 500  # (in distance unit)
-#' 
+#'
 #' # Generate grid of tiles
 #' bbox <- st_bbox(aoi)
 #' bbox[c("xmin","ymin")] <- floor(bbox[c("xmin","ymin")])
-#' 
+#'
 #' xlength <- bbox["xmax"] - bbox["xmin"]
 #' bbox["xmax"] <- bbox["xmin"] + ceiling(xlength / xres(dtm)) * xres(dtm)
 #' ylength <- bbox["ymax"] - bbox["ymin"]
 #' bbox["ymax"] <- bbox["ymin"] + ceiling(ylength / yres(dtm)) * yres(dtm)
 #'
 #' grid <- st_make_grid(bbox, size)
-#' 
+#'
 #' # Generate list of bounding boxes for parallelisation
 #' bboxes <- lapply(grid, function(x)
 #' {
@@ -247,14 +250,14 @@ drive_road <- function(start_line, conductivity, fov = 45, radius = 10, cost_max
 #'   names(bbox) <- c("xmin","xmax","ymin","ymax")
 #'   bbox
 #'  })
-#' 
+#'
 #' # Generate tiles in parallel
 #' outdir <- tempdir()
 #' buffer <- 5
 #' plan(multisession)
 #' filenames <- future_sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
 #' plan(sequential)
-#' 
+#'
 #' # Create VRT from tiles for future use (allow a similar workflow as using a LAScatalog for LAS files)
 #' path_filenames <- file.path(outdir, filenames)
 #' path_vrtfile <- file.path(outdir, "conductivity.vrt")
@@ -280,7 +283,7 @@ tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0)
   # Crop DTM and point cloud
   cropped <- terra::crop(dtm, bbox_buf) |> raster::raster()
   las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
-  
+
   # Compute and write to file final conductivity layer
   conductivities <- grid_conductivity(las, cropped, road = NULL, water = NULL)
   conductivity <- raster::crop(conductivities$conductivity, raster::extent(bbox))
@@ -308,10 +311,10 @@ tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0)
 #'
 #' road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
 #' conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
-#' 
+#'
 #' road <- st_read(road, quiet = TRUE)
 #' conductivity <- rast(conductivity)
-#' 
+#'
 #' road_branches <- find_road_branches(road, conductivity)
 #' plot(road, col = "green", lwd = 3)
 #' plot(road_branches, col = "red", add=TRUE)
@@ -446,7 +449,7 @@ find_road_branches <- function(road, conductivity)
 #'
 #' segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
 #' segmented_road <- rast(segmented_road)
-#' 
+#'
 #' conductivity <- conductivity_from_bool(segmented_road)
 #' plot(conductivity)
 conductivity_from_bool <- function(x, w_max = 15)
