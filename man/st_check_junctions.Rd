@@ -9,12 +9,14 @@ st_check_junctions(roads, tolerance = 8)
 \arguments{
 \item{roads}{multiples lines (\code{sf} format)}
 
+
 \item{tolerance}{numeric (distance unit). Tolerance value used to check if some road endings should
 have been snapped together.}
 }
 \value{
 Polygon object (\code{sf} format) corresponding to circles of \code{tolerance} radius
 around the locations where junctions might be missing.
+
 }
 \description{
 Check if some road endings are close enough to be considered as being potentially part of a junction.
@@ -23,6 +25,7 @@ with the same \code{tolerance} value and the same road network.
 }
 \examples{
 library(sf)
+
 
 network   <- system.file("extdata", "road_network.gpkg", package="MFFProads")
 network   <- st_read(network, "invalid_topology")
