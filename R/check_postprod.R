@@ -39,14 +39,14 @@ check_road_differences <- function(roads, roads_ori, field)
     field = roads_ori[[field]],
     area_over_perimeter = ratios_area_perimeter) |>
     cbind(quantiles_along_road)
-  
+
   names(df_results)[1] <- field
 
   return(df_results)
 }
 
 
-#' Compute a difference index between two roads by considering them as a polygon 
+#' Compute a difference index between two roads by considering them as a polygon
 #'
 #' Connect the two roads by their ends to construct a polygon from which
 #' a ratio of its area over its perimeter will be calculated.
@@ -66,39 +66,39 @@ check_road_differences <- function(roads, roads_ori, field)
 #' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
 #'
-#' ratio <- diff_area_perimeter(road_ori, road_cor, graph = TRUE)
+#' ratio <- MFFProads:::diff_area_perimeter(road_ori, road_cor, graph = TRUE)
 diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 {
   road_ori <- sf::st_geometry(road_ori)
   road_cor <- sf::st_geometry(road_cor)
-  
+
   if (length(road_ori) > 1 | length(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
 
   # Extract vertices
   coords_ori <- sf::st_coordinates(road_ori)[,-3]
   coords_cor <- sf::st_coordinates(road_cor)[,-3]
-  
-  
+
+
   # Adjust coordinates in order to create a valid sequence
   # of vertices for a polygon
   dist_to_start <- dist(rbind(coords_ori[1,], coords_cor[1,]))[1]
   dist_to_end <- dist(rbind(coords_ori[1,], coords_cor[nrow(coords_cor),]))[1]
   closest_vertex <- which.min(c(dist_to_start, dist_to_end))
-  
+
   if (closest_vertex == 1) coords_cor <- apply(coords_cor, 2, rev)
-  
-  
+
+
   # Construct polygon
   poly <- rbind(coords_ori, coords_cor, coords_ori[1,]) |>
     list() |>
     sf::st_polygon() |>
     sf::st_sfc(crs = sf::st_crs(road_ori))
-  
-  
+
+
   # Compute area/perimeter ratio of polygon
   ratio <- as.numeric(sf::st_area(poly) / lwgeom::st_perimeter(poly))
-  
-  
+
+
   # Make graphical representation of the differences
   if (graph)
   {
@@ -138,53 +138,56 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
 #'
-#' p <- diff_along_road(road_ori, road_cor, graph = TRUE)
+#' plot(st_geometry(road_ori))
+#' plot(st_geometry(road_cor), add = T)
+#'
+#' p <- MFFProads:::diff_along_road(road_ori, road_cor, graph = TRUE)
 diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
 {
   road_ori <- sf::st_geometry(road_ori)
   road_cor <- sf::st_geometry(road_cor)
-  
+
   if (length(road_ori) > 1 | length(road_cor) > 1) stop("'road_ori' and 'road_cor' must contain only one feature.", call. = FALSE)
-  
+
   st_full_line_sample <- function(line, n_steps)
   {
     coords <- sf::st_coordinates(line)[,-3]
     pts_extrems <- c(1, nrow(coords)) |>
       lapply(function(x) { sf::st_point(coords[x,]) }) |>
       sf::st_sfc(crs = sf::st_crs(road_ori))
-    
+
     pts_middle <- sf::st_cast(sf::st_line_sample(line, n_steps), "POINT")
     pts <- c(pts_extrems[1], pts_middle, pts_extrems[2])
   }
-  
-  
+
+
   # Sample points along the two roads
   n_steps <- ceiling(sf::st_length(road_ori) / step) |> as.numeric()
   ls_pts <- lapply(c(road_ori, road_cor), st_full_line_sample, n_steps)
   names(ls_pts) <- c("road_ori", "road_cor")
-  
-  
+
+
   # Compute differences at P50, P90, P100
   dist_step <- sf::st_distance(ls_pts[["road_ori"]], ls_pts[["road_cor"]]) |>
     diag() |>
     as.numeric()
-  
+
   p <- quantile(dist_step, probs = c(0.5, 0.90, 1))
-  
-  
+
+
   # Display graphical representation of the differences
   if (graph)
   {
     coords_ori <- sf::st_coordinates(ls_pts[["road_ori"]])
     coords_cor <- sf::st_coordinates(ls_pts[["road_cor"]])
-    
+
     lines <- 1:nrow(coords_ori) |>
       lapply(function(x) { sf::st_linestring(rbind(coords_ori[x,], coords_cor[x,])) }) |>
       sf::st_sfc(crs = sf::st_crs(road_ori))
-    
+
     df_dist <- data.frame(idx = 1:length(dist_step),
                           distance = dist_step)
-    
+
     coords <- rbind(coords_ori, coords_cor)
     limits <- list(x = range(coords[,1]), y = range(coords[,2]))
     bigger <- as.numeric(diff(limits$x) < diff(limits$y)) + 1
@@ -205,5 +208,6 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     title("Pairwise distances along roads",
           sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
   }
+
   return(p)
 }
