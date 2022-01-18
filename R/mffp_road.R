@@ -105,7 +105,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     # Without spatial indexation the road extraction is terribly long
     if (!lidR::is.indexed(ctg))
     {
-      d <- density(ctg)
+      d <- lidR::density(ctg)
       if (d < 5)
         message("No spatial index for LAS/LAZ files in this collection.")
       else if (d < 10)
@@ -330,7 +330,7 @@ measure_roads = function(ctg, roads, dtm, water = NULL, param = mffproads_defaul
 {
   if (!lidR::is.indexed(ctg))
   {
-    d <- density(ctg)
+    d <- lidR::density(ctg)
     if (d < 5)
       message("No spatial index for LAS/LAZ files in this collection.")
     else if (d < 10)

@@ -21,8 +21,8 @@
 #' res <- st_snap_lines(cor, ref, field = "OBJECTID")
 #'
 #' plot(sf::st_geometry(ref), xlim = c(262600, 263200), ylim = c(5253200, 5253600), col = "red")
-#' plot(sf::st_geometry(cor), col = "blue",add = T)
-#' plot(sf::st_geometry(res), col = "darkgreen", add = T)
+#' plot(sf::st_geometry(cor), col = "blue", add = TRUE)
+#' plot(sf::st_geometry(res), col = "darkgreen", add = TRUE)
 #' @export
 st_snap_lines = function(roads, ref, tolerance = 30, field = NULL)
 {
@@ -94,6 +94,8 @@ simple_snap <- function(roads, tolerance)
 
 advanced_snap <- function(roads, roads_ori, field, tolerance)
 {
+  X <- Y <- id <- SCORE <- CLASS <- NULL
+
   IDs1 <- sort(unique(roads[[field]]))
   IDs2 <- sort(unique(roads_ori[[field]]))
   if (length(IDs1) != length(roads[[field]])) stop("Values in unique identifier field are not unique for 'roads'.", call. = FALSE)
@@ -141,8 +143,8 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
   tb_startpoint <- prepare_data(roads_ori, FALSE)
 
   ls_heading <- lapply(sf::st_geometry(roads_ori), st_ends_heading)
-  heading_tail_head <- c(sapply(ls_heading, tail, 1),
-                         sapply(ls_heading, head, 1))
+  heading_tail_head <- c(sapply(ls_heading, utils::tail, 1),
+                         sapply(ls_heading, utils::head, 1))
 
   tb_ends_ori <- rbind(tb_endpoint, tb_startpoint) |>
     dplyr::mutate(norm_heading = ifelse(heading_tail_head < 0, heading_tail_head + 180, heading_tail_head))
@@ -420,17 +422,18 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 #' @noRd
 find_best_connexion <- function(tb_node)
 {
-  m_row   <- combn(seq(nrow(tb_node)), 2)
-  m_angle <- combn(tb_node[["norm_heading"]], 2)
-  m_score <- combn(tb_node[["SCORE"]], 2)
-  m_state <- combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
+  comb_heading <- comb_state <- comb_score <- NULL
+
+  m_row   <- utils::combn(seq(nrow(tb_node)), 2)
+  m_angle <- utils::combn(tb_node[["norm_heading"]], 2)
+  m_score <- utils::combn(tb_node[["SCORE"]], 2)
+  m_state <- utils::combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
 
   tb_similarity <- dplyr::tibble(
     pairs        = seq(ncol(m_row)),
     comb_heading = abs(abs(apply(m_angle, 2, diff)) - 90),
     comb_state   = apply(m_state, 2, sum),
-    comb_score   = apply(m_score, 2, sum)
-    ) |>
+    comb_score   = apply(m_score, 2, sum)) |>
     dplyr::mutate(comb_heading = ifelse(comb_heading > 80, 80, comb_heading)) |>
     dplyr::mutate(comb_state = ifelse(comb_state %in% c(1,2), comb_state, 3)) |>
     dplyr::arrange(dplyr::desc(comb_heading), comb_state, dplyr::desc(comb_score))

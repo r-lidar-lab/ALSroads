@@ -34,6 +34,6 @@ cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
 res <- st_snap_lines(cor, ref, field = "OBJECTID")
 
 plot(sf::st_geometry(ref), xlim = c(262600, 263200), ylim = c(5253200, 5253600), col = "red")
-plot(sf::st_geometry(cor), col = "blue",add = T)
-plot(sf::st_geometry(res), col = "darkgreen", add = T)
+plot(sf::st_geometry(cor), col = "blue", add = TRUE)
+plot(sf::st_geometry(res), col = "darkgreen", add = TRUE)
 }
