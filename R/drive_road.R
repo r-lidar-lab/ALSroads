@@ -209,11 +209,12 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #' library(terra)
 #' library(lidR)
 #'
-#' dir <- system.file("extdata", "", package="MFFProads")
-#' path_dtm <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+#' dir <- system.file("extdata", "", package = "MFFProads")
+#' path_dtm <- system.file("extdata", "dtm_1m.tif", package = "MFFProads")
 #'
 #' ctg <- readLAScatalog(dir)
 #' dtm <- rast(path_dtm)
+#' outdir <- getwd()
 #'
 #' # Define parameters for grid of tiles
 #' # Internal buffer is only to mess things up a bit
@@ -243,7 +244,6 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #'  })
 #'
 #' # Generate tiles
-#' outdir <- tempdir()
 #' buffer <- 5
 #' filenames <- sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
 #'
