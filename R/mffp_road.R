@@ -139,7 +139,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   new_road$SINUOSITY     <- NA
   new_road$CONDUCTIVITY  <- NA
   new_road$SCORE         <- NA
-  new_road$STATE         <- 0
+  new_road$CLASS         <- 0
 
   # reorder the columns so outputs are consistent even if exiting early
   ngeom <- attr(new_road, "sf_column")
@@ -196,8 +196,8 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
     new_road$ROADWIDTH     <- mean(res$ROADWIDTH)
     new_road$CONDUCTIVITY  <- mean(res$CONDUCTIVITY)
     new_road$SCORE         <- road_score(new_road, param)
-    new_road$STATE         <- get_state(new_road$SCORE)
-    if (!is.na(new_road$STATE) && new_road$STATE < 3) sf::st_geometry(new_road) <- geom
+    new_road$CLASS         <- get_class(new_road$SCORE)
+    if (!is.na(new_road$CLASS) && new_road$CLASS < 3) sf::st_geometry(new_road) <- geom
     verbose("Done\n") ; cat("\n")
     return(new_road)
   }
@@ -234,7 +234,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       new_road$SINUOSITY     <- NA
       new_road$CONDUCTIVITY  <- 0
       new_road$SCORE         <- 0
-      new_road$STATE         <- 4
+      new_road$CLASS         <- 4
       verbose("Done\n") ; cat("\n")
       return(new_road)
     }
@@ -254,7 +254,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
       new_road$SINUOSITY     <- NA
       new_road$CONDUCTIVITY  <- NA
       new_road$SCORE         <- 0
-      new_road$STATE         <- 4
+      new_road$CLASS         <- 4
       verbose("Done\n") ; cat("\n")
       return(new_road)
     }
@@ -287,7 +287,7 @@ measure_road = function(ctg, road, dtm, water = NULL, param = mffproads_default_
   # that are average to return a aggregated metrics
   metrics <- road_metrics(new_road, slice_metrics)
   metrics[["SCORE"]] <- road_score(metrics, param)
-  metrics[["CLASS"]] <- get_state(metrics[["SCORE"]])
+  metrics[["CLASS"]] <- get_class(metrics[["SCORE"]])
 
   # Merge the tables of attributes
   original_geometry <- sf::st_geometry(road)

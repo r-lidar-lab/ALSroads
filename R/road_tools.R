@@ -225,7 +225,7 @@ road_score = function(metrics, param)
   return(round(pexist,1))
 }
 
-get_state =  function(score)
+get_class =  function(score)
 {
   5 - as.integer(cut(score, breaks = c(-1,25,50,75,101), right = FALSE))
 }

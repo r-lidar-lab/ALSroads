@@ -17,10 +17,10 @@
 #' f <- system.file("extdata", "road_network.gpkg", package="MFFProads")
 #'
 #' ref <- sf::st_read(f, layer = "original")  # input of measure_roads
-#' cor <- sf::st_read(f, layer = "invalid_topology") # output of measure_roads
+#' cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
 #' res <- st_snap_lines(cor, ref, field = "OBJECTID")
 #'
-#' plot(sf::st_geometry(ref), xlim = c(260800, 261000), ylim = c(5250400, 5250600), col = "red")
+#' plot(sf::st_geometry(ref), xlim = c(260800, 261000), ylim = c(5250400, 5250650), col = "red")
 #' plot(sf::st_geometry(cor), col = "blue", add = TRUE)
 #' plot(sf::st_geometry(res), col = "darkgreen", add = TRUE)
 #' @export
@@ -92,22 +92,24 @@ simple_snap <- function(roads, tolerance)
   return(roads)
 }
 
-advanced_snap <- function(roads, roads_ori, field, tolerance)
+advanced_snap <- function(roads, ref, field, tolerance)
 {
   X <- Y <- id <- SCORE <- CLASS <- NULL
 
   IDs1 <- sort(unique(roads[[field]]))
-  IDs2 <- sort(unique(roads_ori[[field]]))
+  IDs2 <- sort(unique(ref[[field]]))
   if (length(IDs1) != length(roads[[field]])) stop("Values in unique identifier field are not unique for 'roads'.", call. = FALSE)
-  if (length(IDs2) != length(roads_ori[[field]])) stop("Values in unique identifier field are not unique for 'roads_ori'.", call. = FALSE)
+  if (length(IDs2) != length(ref[[field]])) stop("Values in unique identifier field are not unique for 'ref'.", call. = FALSE)
   if (!all(IDs1 == IDs2)) stop("Values in unique identifier field are not the same in both road datasets.", call. = FALSE)
+  if (!"SCORE" %in% colnames(roads)) stop("'SCORE' column is missing from 'roads'.", call. = FALSE)
+  if (!"CLASS" %in% colnames(roads)) stop("'CLASS' column is missing from 'roads'.", call. = FALSE)
 
   dist_unit <- sf::st_crs(roads)$units
 
   # Arrange both road datasets to make sure
   # that line indices will match between them
   roads <- dplyr::arrange(roads, field)
-  roads_ori <- dplyr::arrange(roads_ori, field)
+  ref <- dplyr::arrange(ref, field)
 
   prepare_data <- function(roads, end = FALSE)
   {
@@ -139,20 +141,20 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
     dplyr::mutate(CLASS = rep(roads[["CLASS"]], 2))
 
   # Non-corrected roads
-  tb_endpoint   <- prepare_data(roads_ori, TRUE)
-  tb_startpoint <- prepare_data(roads_ori, FALSE)
+  tb_endpoint   <- prepare_data(ref, TRUE)
+  tb_startpoint <- prepare_data(ref, FALSE)
 
-  ls_heading <- lapply(sf::st_geometry(roads_ori), st_ends_heading)
+  ls_heading <- lapply(sf::st_geometry(ref), st_ends_heading)
   heading_tail_head <- c(sapply(ls_heading, utils::tail, 1),
                          sapply(ls_heading, utils::head, 1))
 
-  tb_ends_ori <- rbind(tb_endpoint, tb_startpoint) |>
+  tb_ends_ref <- rbind(tb_endpoint, tb_startpoint) |>
     dplyr::mutate(norm_heading = ifelse(heading_tail_head < 0, heading_tail_head + 180, heading_tail_head))
 
 
   # List of distinct connected nodes in the
   # non-corrected roads dataset
-  tb_nodes_grouped <- tb_ends_ori |>
+  tb_nodes_grouped <- tb_ends_ref |>
     dplyr::group_by(X, Y)
 
   if (nrow(tb_nodes_grouped) == 0) stop("No road junction has been found in original road dataset.", call. = FALSE)
@@ -169,7 +171,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
   for (tb_node in ls_tb_nodes)
   {
     IDs <- tb_node[["id"]]
-    tb_node_ori <- dplyr::filter(tb_ends_ori, id %in% IDs)
+    tb_node_ref <- dplyr::filter(tb_ends_ref, id %in% IDs)
     tb_node_cor <- dplyr::filter(tb_ends_roads, id %in% IDs)
 
 
@@ -183,7 +185,7 @@ advanced_snap <- function(roads, roads_ori, field, tolerance)
     # Find the two segments that are the most
     # likely to be the extension of each other
     # Those two are marked out as the "bridge"
-    bridge_ids <- tb_node_ori |>
+    bridge_ids <- tb_node_ref |>
       dplyr::left_join(dplyr::select(tb_node_cor, id, SCORE, CLASS), by = "id") |>
       find_best_connexion()
 
@@ -415,32 +417,32 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 #' to be the extension of each other. The prime factor is the angle formed between
 #' each pair of lines (the flatter the better).
 #'
-#' @param tb_node  \code{tibble} containing info about the normalized heading, score and state of all lines
+#' @param tb_node  \code{tibble} containing info about the normalized heading, score and class of all lines
 #' at a same junction.
 #'
 #' @return IDs (\code{character}) of the pair of lines having the best fit.
 #' @noRd
 find_best_connexion <- function(tb_node)
 {
-  comb_heading <- comb_state <- comb_score <- NULL
+  comb_heading <- comb_class <- comb_score <- NULL
 
   m_row   <- utils::combn(seq(nrow(tb_node)), 2)
   m_angle <- utils::combn(tb_node[["norm_heading"]], 2)
   m_score <- utils::combn(tb_node[["SCORE"]], 2)
-  m_state <- utils::combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
+  m_class <- utils::combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
 
   tb_similarity <- dplyr::tibble(
     pairs        = seq(ncol(m_row)),
     comb_heading = abs(abs(apply(m_angle, 2, diff)) - 90),
-    comb_state   = apply(m_state, 2, sum),
+    comb_class   = apply(m_class, 2, sum),
     comb_score   = apply(m_score, 2, sum)) |>
     dplyr::mutate(comb_heading = ifelse(comb_heading > 80, 80, comb_heading)) |>
-    dplyr::mutate(comb_state = ifelse(comb_state %in% c(1,2), comb_state, 3)) |>
-    dplyr::arrange(dplyr::desc(comb_heading), comb_state, dplyr::desc(comb_score))
+    dplyr::mutate(comb_class = ifelse(comb_class %in% c(1,2), comb_class, 3)) |>
+    dplyr::arrange(dplyr::desc(comb_heading), comb_class, dplyr::desc(comb_score))
 
   # The best fit is based on (in order):
   #  - the angle formed between the segments (the flatter the better)
-  #  - the state (corrected roads are favored)
+  #  - the class (corrected roads are favored)
   #  - the score (best overal score is favored)
   idx_best <- tb_similarity[1,][["pairs"]]
   ids_best <- tb_node[m_row[,idx_best],][["id"]]

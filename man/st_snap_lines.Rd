@@ -30,10 +30,10 @@ is more advanced.
 f <- system.file("extdata", "road_network.gpkg", package="MFFProads")
 
 ref <- sf::st_read(f, layer = "original")  # input of measure_roads
-cor <- sf::st_read(f, layer = "invalid_topology") # output of measure_roads
+cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
 res <- st_snap_lines(cor, ref, field = "OBJECTID")
 
-plot(sf::st_geometry(ref), xlim = c(260800, 261000), ylim = c(5250400, 5250600), col = "red")
+plot(sf::st_geometry(ref), xlim = c(260800, 261000), ylim = c(5250400, 5250650), col = "red")
 plot(sf::st_geometry(cor), col = "blue", add = TRUE)
 plot(sf::st_geometry(res), col = "darkgreen", add = TRUE)
 }

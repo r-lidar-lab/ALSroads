@@ -21,10 +21,15 @@ network.
 library(sf)
 
 network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
-network <- sf::st_read(network, "invalid_topology")
+network <- st_read(network, "invalid_topology")
 
 crossings <- st_check_crossings(network)
 
+par(mfrow=c(1,2))
 plot(st_geometry(network), axes = TRUE) # Inspected roads
-plot(st_geometry(crossings), col = "blue", add = TRUE) # Crossings to fix
+plot(crossings, col = "blue", add = TRUE) # Crossings to fix
+title("Full extent")
+plot(st_geometry(network), axes = TRUE, xlim = c(260891, 260892), ylim=c(5250599, 5250599.5))
+plot(crossings, col = "blue", add = TRUE)
+title("Zoom at crossings")
 }
