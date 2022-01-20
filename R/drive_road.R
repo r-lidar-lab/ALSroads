@@ -30,7 +30,7 @@ get_heading <- function(from, to)
 #'
 #' conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
 #' drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
-#' 
+#'
 #' conductivity <- raster(conductivity)
 #' starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
 #'
@@ -187,100 +187,6 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 
   return(list(line = newline, cost = m_coords[,3]))
 }
-
-
-#' Generate and save to file tile of conductivity
-#'
-#' Generate and save to file tile of conductivity based on the extent
-#' of an area of interest.
-#'
-#' @param bbox  named numeric vector. Bounding box vector with names \code{xmin}, \code{xmax}, \code{ymin}, \code{ymax}
-#' @param dtm  raster (\code{raster} format) or path to raster file. Digital terrain model covering \code{bbox}.
-#' @param ctg  \code{LAScatalog} covering \code{bbox}.
-#' @param buffer  numeric (pixel unit). Buffer to be added outside of \code{bbox} when computing metrics. Won't affect extent of the produced tile.
-#' @param outdir  character. Directory in which the produced tile will be saved.
-#'
-#' @return character representing filenames of generated tiles.
-#' @export
-#' @examples
-#' library(sf)
-#' library(raster)
-#' library(lidR)
-#'
-#' dir <- system.file("extdata", "", package = "MFFProads")
-#' path_dtm <- system.file("extdata", "dtm_1m.tif", package = "MFFProads")
-#'
-#' ctg <- readLAScatalog(dir)
-#' dtm <- raster(path_dtm)
-#' outdir <- getwd()
-#'
-#' # Define parameters for grid of tiles
-#' # Internal buffer is only to mess things up a bit
-#' aoi <- st_bbox(ctg) |>
-#'   st_as_sfc() |>
-#'   st_buffer(-14.7)
-#' size <- 500  # (in distance unit)
-#'
-#' # Generate grid of tiles
-#' bbox <- st_bbox(aoi)
-#' bbox[c("xmin","ymin")] <- floor(bbox[c("xmin","ymin")])
-#'
-#' xlength <- bbox["xmax"] - bbox["xmin"]
-#' bbox["xmax"] <- bbox["xmin"] + ceiling(xlength / xres(dtm)) * xres(dtm)
-#' ylength <- bbox["ymax"] - bbox["ymin"]
-#' bbox["ymax"] <- bbox["ymin"] + ceiling(ylength / yres(dtm)) * yres(dtm)
-#'
-#' grid <- st_make_grid(bbox, size)
-#'
-#' # Generate list of bounding boxes
-#' bboxes <- lapply(grid, function(x)
-#' {
-#'   coords <- st_coordinates(x)
-#'   bbox <- c(range(coords[,"X"]), range(coords[,"Y"]))
-#'   names(bbox) <- c("xmin","xmax","ymin","ymax")
-#'   bbox
-#'  })
-#'
-#' # Generate tiles
-#' buffer <- 5
-#' filenames <- sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
-#'
-#' # Create VRT from tiles for future use (allow a similar workflow as using a LAScatalog for LAS files)
-#' path_filenames <- file.path(outdir, filenames)
-#' path_vrtfile <- file.path(outdir, "conductivity.vrt")
-#' vrt(path_filenames, path_vrtfile)
-tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0, param = mffproads_default_parameters)
-{
-  # Check if dtm is a path or a "RasterLayer"
-  if (class(dtm)[1] != "RasterLayer")
-  {
-    if (is.character(dtm))
-      {
-        dtm <- raster::raster(dtm)
-      } else {
-        stop("Invalid 'dtm'. Must be either object 'RasterLayer' or path to raster file", call. = FALSE)
-      }
-  }
-
-  # Buffer added to bounding box to ensure valid calculations at edges and
-  # thus a smooth transition between tiles
-  resolution <- raster::xres(dtm)
-  bbox_buf <- c(bbox["xmin"], bbox["xmax"], bbox["ymin"], bbox["ymax"]) + resolution * c(-buffer, buffer, -buffer, buffer)
-
-  # Crop DTM and point cloud
-  cropped <- raster::crop(dtm, bbox_buf)
-  las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
-
-  # Compute and write to file final conductivity layer
-  conductivities <- grid_conductivity(las, centerline = NULL, dtm = cropped, param = param)
-  conductivity <- raster::crop(conductivities$conductivity, bbox)
-
-  filename <- paste0("conductivity_", bbox["xmin"], "_", bbox["ymin"], ".tif")
-  raster::writeRaster(conductivity, file.path(outdir, filename), overwrite = TRUE, options = "COMPRESS=DEFLATE")
-
-  return(filename)
-}
-
 
 #' Find potential secondary roads from main road
 #'
