@@ -15,7 +15,7 @@ get_heading <- function(from, to)
 #' of road segment pointing in the right direction.
 #'
 #' @param starting_road  line (\code{sf} format)
-#' @param conductivity  raster (\code{terra} format)
+#' @param conductivity  raster (\code{raster} format)
 #' @param fov  numeric. Field of view (degrees) ahead of the search vector.
 #' @param radius  numeric (distance unit). Search radius used to find the next most probable point on the road.
 #' @param cost_max  numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
@@ -25,12 +25,13 @@ get_heading <- function(from, to)
 #' of cost at each invidual vertices of the line.
 #' @export
 #' @examples
-#' library(terra)
+#' library(raster)
 #' library(sf)
 #'
 #' conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
 #' drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
-#' conductivity <- rast(conductivity)
+#' 
+#' conductivity <- raster(conductivity)
 #' starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
 #'
 #' res <- drive_road(starting_line, conductivity)
@@ -43,8 +44,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 {
   if (is.null(cost_max)) cost_max <- radius * 6
 
-
-  resolution <- terra::res(conductivity)
+  resolution <- raster::res(conductivity)
   if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
   resolution <- resolution[1]
 
@@ -64,9 +64,9 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
   aoi <- starting_road |>
     st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
     sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
-    terra::vect()
+    sf::as_Spatial()
 
-  conductivity_crop <- terra::crop(conductivity, aoi)
+  conductivity_crop <- raster::crop(conductivity, aoi)
 
   resolution_min <- 2  # Could be set as a parameter
   if (resolution < resolution_min)
@@ -74,7 +74,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
     agg_factor <- ceiling(resolution_min / resolution)
     resolution <- resolution * agg_factor
     cat("Step 0: downsample conductivity to", resolution, "m\n")
-    conductivity_crop <- terra::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
+    conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
   }
 
   if (radius < resolution) stop("Radius must be equal or larger than resolution of 'conductivity' raster.", call. = FALSE)
@@ -93,7 +93,6 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
   # Transition matrix
   cat("Step 1: computation of the transition matrix\n")
   trans <- conductivity_crop |>
-    raster::raster() |>
     transition()
 
   # Loop initialisation
@@ -118,8 +117,8 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
       sf::as_Spatial()
 
     # Check if some ends fall outside of the cropped conductivity raster
-    val <- terra::extract(conductivity_crop, M)
-    if (any(is.nan(val[,2])))
+    val <- raster::extract(conductivity_crop, M)
+    if (any(is.na(val)))
     {
       # Make a newly cropped conductivity raster further ahead
       line <- c(p1[1:2], p2[1:2]) |>
@@ -130,22 +129,22 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
       aoi <- line |>
         st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
         sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
-        terra::vect()
+        sf::as_Spatial()
 
-      conductivity_crop <- terra::crop(conductivity, aoi)
+      conductivity_crop <- raster::crop(conductivity, aoi)
 
-      resolution <- terra::res(conductivity)[1]
+      resolution <- raster::res(conductivity)[1]
       resolution_min <- 2  # Could be set as a parameter
       if (resolution < resolution_min)
       {
         agg_factor <- ceiling(resolution_min / resolution)
         resolution <- resolution * agg_factor
-        conductivity_crop <- terra::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
+        conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
       }
 
       # Check again if some ends fall outside of the newly cropped conductivity raster
-      val <- terra::extract(conductivity_crop, M)
-      if (any(is.nan(val[,2])))
+      val <- raster::extract(conductivity_crop, M)
+      if (any(is.na(val)))
       {
         warning("Drive stopped early. Edge of conductivity raster has been reached.", call. = FALSE)
         cost_max <- -Inf
@@ -153,7 +152,6 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 
       # Generate a new transition matrix
       trans <- conductivity_crop |>
-        raster::raster() |>
         transition()
     }
 
@@ -197,7 +195,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #' of an area of interest.
 #'
 #' @param bbox  named numeric vector. Bounding box vector with names \code{xmin}, \code{xmax}, \code{ymin}, \code{ymax}
-#' @param dtm  raster (\code{terra} format) or path to raster file. Digital terrain model covering \code{bbox}.
+#' @param dtm  raster (\code{raster} format) or path to raster file. Digital terrain model covering \code{bbox}.
 #' @param ctg  \code{LAScatalog} covering \code{bbox}.
 #' @param buffer  numeric (pixel unit). Buffer to be added outside of \code{bbox} when computing metrics. Won't affect extent of the produced tile.
 #' @param outdir  character. Directory in which the produced tile will be saved.
@@ -206,14 +204,14 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #' @export
 #' @examples
 #' library(sf)
-#' library(terra)
+#' library(raster)
 #' library(lidR)
 #'
 #' dir <- system.file("extdata", "", package = "MFFProads")
 #' path_dtm <- system.file("extdata", "dtm_1m.tif", package = "MFFProads")
 #'
 #' ctg <- readLAScatalog(dir)
-#' dtm <- rast(path_dtm)
+#' dtm <- raster(path_dtm)
 #' outdir <- getwd()
 #'
 #' # Define parameters for grid of tiles
@@ -253,32 +251,32 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #' vrt(path_filenames, path_vrtfile)
 tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0, param = mffproads_default_parameters)
 {
-  # Check if dtm is a path or a SpatRaster
-  if (class(dtm)[1] != "SpatRaster")
+  # Check if dtm is a path or a "RasterLayer"
+  if (class(dtm)[1] != "RasterLayer")
   {
     if (is.character(dtm))
       {
-        dtm <- terra::rast(dtm)
+        dtm <- raster::raster(dtm)
       } else {
-        stop("Invalid 'dtm'. Must be either object 'SpatRaster' or path to raster file", call. = FALSE)
+        stop("Invalid 'dtm'. Must be either object 'RasterLayer' or path to raster file", call. = FALSE)
       }
   }
 
   # Buffer added to bounding box to ensure valid calculations at edges and
   # thus a smooth transition between tiles
-  resolution <- terra::xres(dtm)
+  resolution <- raster::xres(dtm)
   bbox_buf <- c(bbox["xmin"], bbox["xmax"], bbox["ymin"], bbox["ymax"]) + resolution * c(-buffer, buffer, -buffer, buffer)
 
   # Crop DTM and point cloud
-  cropped <- terra::crop(dtm, bbox_buf) |> raster::raster()
+  cropped <- raster::crop(dtm, bbox_buf)
   las <- lidR::clip_rectangle(ctg, bbox_buf["xmin"], bbox_buf["ymin"], bbox_buf["xmax"], bbox_buf["ymax"])
 
   # Compute and write to file final conductivity layer
   conductivities <- grid_conductivity(las, centerline = NULL, dtm = cropped, param = param)
-  conductivity <- terra::crop(terra::rast(conductivities$conductivity), terra::ext(bbox))
+  conductivity <- raster::crop(conductivities$conductivity, bbox)
 
   filename <- paste0("conductivity_", bbox["xmin"], "_", bbox["ymin"], ".tif")
-  terra::writeRaster(conductivity, file.path(outdir, filename), overwrite = TRUE, gdal = "COMPRESS=DEFLATE")
+  raster::writeRaster(conductivity, file.path(outdir, filename), overwrite = TRUE, options = "COMPRESS=DEFLATE")
 
   return(filename)
 }
@@ -290,19 +288,19 @@ tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0, param = mffpro
 #' a conductivity raster and the line geometry of the main road.
 #'
 #' @param road  line (\code{sf} format). Knowed road.
-#' @param conductivity  raster (\code{terra} format). Conductivity raster covering the road.
+#' @param conductivity  raster (\code{raster} format). Conductivity raster covering the road.
 #'
 #' @return lines (\code{sf} format) representing potential starting points of branching roads.
 #' @export
 #' @examples
 #' library(sf)
-#' library(terra)
+#' library(raster)
 #'
 #' road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
 #' conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
 #'
 #' road <- st_read(road, "drived_road", quiet = TRUE)
-#' conductivity <- rast(conductivity)
+#' conductivity <- raster(conductivity)
 #'
 #' road_branches <- find_road_branches(road, conductivity)
 #'
@@ -314,9 +312,9 @@ find_road_branches <- function(road, conductivity)
   # Subset conductivity raster around the main road
   # Only consider conductivity values over 0.2 as good enough
   # to be considered as being potentially part of a road
-  buffer40m <- sf::st_buffer(road, 40)
-  conduc_crop <- terra::crop(conductivity, buffer40m)
-  conductivity_threshold <- terra::mask(conduc_crop > 0.2, terra::vect(buffer40m))
+  buffer40m <- sf::st_buffer(road, 40) |> sf::as_Spatial()
+  conduc_crop <- raster::crop(conductivity, buffer40m)
+  conductivity_threshold <- raster::mask(conduc_crop > 0.2, buffer40m)
 
   # Extract boolean raster which should mainly contain
   # pixels from the input road and the potential side jonctions
@@ -326,9 +324,9 @@ find_road_branches <- function(road, conductivity)
   m_seed <- coords_road[round(nrow(coords_road)/2), -3] |>
     matrix(nrow = 1)
 
-  region_grow <- terra::patches(conductivity_threshold, directions = 8, zeroAsNA = TRUE)
-  value_seed <- terra::extract(region_grow, m_seed)[1,1]
-  conductivity_region <- terra::mask(conduc_crop, region_grow == value_seed, inverse = TRUE, maskvalues = 1)
+  region_grow <- raster::clump(conductivity_threshold, directions = 8)
+  value_seed <- raster::extract(region_grow, m_seed)
+  conductivity_region <- raster::mask(conduc_crop, region_grow == value_seed)
 
   # Create (raster) search zone as a band around main road where potential jonction roads could be.
   # The search zone is between 20 m and 30 m on each side of the main road
@@ -336,19 +334,20 @@ find_road_branches <- function(road, conductivity)
   buffer30m <- sf::st_buffer(road, 30)
 
   search_zone <- sf::st_difference(buffer30m, buffer20m) |>
-    terra::vect() |>
-    terra::rasterize(conductivity_region)
+    sf::as_Spatial() |>
+    raster::rasterize(conductivity_region)
 
   # Inside the search zone raster, only keep pixels with high conductivity
-  conductivity_search_zone <- terra::mask(conductivity_region, search_zone, inverse = TRUE, maskvalues = 1)
-  conductivity_search_zone <- terra::mask(conductivity_region, conductivity_search_zone > 0.4, inverse = TRUE, maskvalues = 1)
+  conductivity_search_zone <- conductivity_region * search_zone
+  conductivity_search_zone <- conductivity_region * (conductivity_search_zone > 0.4)
+  conductivity_search_zone[conductivity_search_zone == 0] <- -Inf
 
   # Find clump of pixels that are big enough to be considered
   # as having a good potential to be part of a road
   # These pixels are then converted to points
   pts_clump <- conductivity_search_zone |>
-    terra::patches(directions = 8, zeroAsNA = TRUE) |>
-    terra::as.points() |>
+    raster::clump(directions = 8) |>
+    raster::rasterToPoints(spatial = TRUE) |>
     sf::st_as_sf()
 
   pts_clump_filtered <- pts_clump |>
@@ -374,7 +373,6 @@ find_road_branches <- function(road, conductivity)
   ends <- lwgeom::st_endpoint(starting_roads_pot) |> sf::as_Spatial()
 
   trans <- conductivity_region |>
-    raster::raster() |>
     transition()
 
   branches_full <- lapply(seq_along(starts), function(i) { gdistance::shortestPath(trans, starts[i], ends[i], output = "SpatialLines") }) |>
@@ -430,16 +428,16 @@ find_road_branches <- function(road, conductivity)
 #' will enhance the center of an object. In cases of roads (narrow elongated shape), the centerline
 #' will becone more apparent.
 #'
-#' @param x  raster (\code{terra} format). Boolean raster (1/0) where all 1 represent a pixel that might be categorized as a road.
+#' @param x  raster (\code{raster} format). Boolean raster (1/0) where all 1 represent a pixel that might be categorized as a road.
 #' @param w_max  numeric. Maximum window size to use (start from 3x3). Must be an odd number over 3.
 #'
-#' @return  raster (\code{terra} format) of conductivity with values ranging from 0 to 1.
+#' @return  raster (\code{raster} format) of conductivity with values ranging from 0 to 1.
 #' @export
 #' @examples
-#' library(terra)
+#' library(raster)
 #'
 #' segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
-#' segmented_road <- rast(segmented_road)
+#' segmented_road <- raster(segmented_road)
 #'
 #' conductivity <- conductivity_from_bool(segmented_road)
 #' plot(conductivity)
@@ -448,9 +446,9 @@ conductivity_from_bool <- function(x, w_max = 15)
   if ((w_max %% 2 == 0) | (w_max <= 3)) stop("'w_max' must be an odd number over 3.", call. = FALSE)
 
   conductivity <- seq(3, w_max, 2) |>
-    lapply(function(w) terra::focal(x, w)/w^2) |>
-    terra::sds() |>
-    terra::app(fun = mean)
+    lapply(function(w) raster::focal(x, matrix(1, w, w))/w^2) |>
+    raster::brick() |>
+    raster::calc(fun = mean)
 
   return(conductivity)
 }
