@@ -4,10 +4,10 @@
 \alias{drive_road}
 \title{Drive along an unknown road}
 \usage{
-drive_road(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
+drive_road(starting_road, conductivity, fov = 45, radius = 10, cost_max = NULL)
 }
 \arguments{
-\item{start_line}{line (\code{sf} format)}
+\item{starting_road}{line (\code{sf} format)}
 
 \item{conductivity}{raster (\code{terra} format)}
 
@@ -16,7 +16,7 @@ drive_road(start_line, conductivity, fov = 45, radius = 10, cost_max = NULL)
 \item{radius}{numeric (distance unit). Search radius used to find the next most probable point on the road.}
 
 \item{cost_max}{numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
-If no value is provided \code{radius * 6} will be.}
+If no value is provided \code{radius * 6} will be used.}
 }
 \value{
 list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector
@@ -31,14 +31,14 @@ library(terra)
 library(sf)
 
 conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
-start_line <- system.file("extdata", "start_line.gpkg", package = "MFFProads")
+drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
 conductivity <- rast(conductivity)
-start_line <- st_read(start_line)
+starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
 
-res <- drive_road(start_line, conductivity)
+res <- drive_road(starting_line, conductivity)
 
 plot(conductivity, col = viridis::viridis(50))
 plot(res$line, add = TRUE, col = "red", lwd = 2)
-plot(start_line, add = TRUE, col = "green", lwd = 3)
+plot(starting_line, add = TRUE, col = "green", lwd = 3)
 plot(res$cost, type = "l")
 }

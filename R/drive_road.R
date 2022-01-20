@@ -305,7 +305,9 @@ tile_conductivity <- function(bbox, dtm, ctg, outdir, buffer = 0, param = mffpro
 #' conductivity <- rast(conductivity)
 #'
 #' road_branches <- find_road_branches(road, conductivity)
-#' plot(road, col = "green", lwd = 3)
+#'
+#' plot(conductivity, col = viridis::viridis(50))
+#' plot(road, col = "green", lwd = 3, add = TRUE)
 #' plot(road_branches, col = "red", add = TRUE)
 find_road_branches <- function(road, conductivity)
 {

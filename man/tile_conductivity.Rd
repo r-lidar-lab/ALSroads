@@ -4,7 +4,14 @@
 \alias{tile_conductivity}
 \title{Generate and save to file tile of conductivity}
 \usage{
-tile_conductivity(bbox, dtm, ctg, outdir, buffer = 0)
+tile_conductivity(
+  bbox,
+  dtm,
+  ctg,
+  outdir,
+  buffer = 0,
+  param = mffproads_default_parameters
+)
 }
 \arguments{
 \item{bbox}{named numeric vector. Bounding box vector with names \code{xmin}, \code{xmax}, \code{ymin}, \code{ymax}}
@@ -28,14 +35,13 @@ of an area of interest.
 library(sf)
 library(terra)
 library(lidR)
-library(future)
-library(future.apply)
 
-dir <- system.file("extdata", "", package="MFFProads")
-path_dtm <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+dir <- system.file("extdata", "", package = "MFFProads")
+path_dtm <- system.file("extdata", "dtm_1m.tif", package = "MFFProads")
 
 ctg <- readLAScatalog(dir)
 dtm <- rast(path_dtm)
+outdir <- getwd()
 
 # Define parameters for grid of tiles
 # Internal buffer is only to mess things up a bit
@@ -55,7 +61,7 @@ bbox["ymax"] <- bbox["ymin"] + ceiling(ylength / yres(dtm)) * yres(dtm)
 
 grid <- st_make_grid(bbox, size)
 
-# Generate list of bounding boxes for parallelisation
+# Generate list of bounding boxes
 bboxes <- lapply(grid, function(x)
 {
   coords <- st_coordinates(x)
@@ -64,12 +70,9 @@ bboxes <- lapply(grid, function(x)
   bbox
  })
 
-# Generate tiles in parallel
-outdir <- tempdir()
+# Generate tiles
 buffer <- 5
-plan(multisession)
-filenames <- future_sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
-plan(sequential)
+filenames <- sapply(bboxes, tile_conductivity, path_dtm, ctg, outdir, buffer)
 
 # Create VRT from tiles for future use (allow a similar workflow as using a LAScatalog for LAS files)
 path_filenames <- file.path(outdir, filenames)

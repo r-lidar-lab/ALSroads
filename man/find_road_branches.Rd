@@ -25,10 +25,12 @@ library(terra)
 road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
 conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
 
-road <- st_read(road, quiet = TRUE)
+road <- st_read(road, "drived_road", quiet = TRUE)
 conductivity <- rast(conductivity)
 
 road_branches <- find_road_branches(road, conductivity)
-plot(road, col = "green", lwd = 3)
-plot(road_branches, col = "red", add=TRUE)
+
+plot(conductivity, col = viridis::viridis(50))
+plot(road, col = "green", lwd = 3, add = TRUE)
+plot(road_branches, col = "red", add = TRUE)
 }
