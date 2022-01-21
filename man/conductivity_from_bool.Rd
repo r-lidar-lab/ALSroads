@@ -7,12 +7,12 @@
 conductivity_from_bool(x, w_max = 15)
 }
 \arguments{
-\item{x}{raster (\code{terra} format). Boolean raster (1/0) where all 1 represent a pixel that might be categorized as a road.}
+\item{x}{raster (\code{raster} format). Boolean raster (1/0) where all 1 represent a pixel that might be categorized as a road.}
 
 \item{w_max}{numeric. Maximum window size to use (start from 3x3). Must be an odd number over 3.}
 }
 \value{
-raster (\code{terra} format) of conductivity with values ranging from 0 to 1.
+raster (\code{raster} format) of conductivity with values ranging from 0 to 1.
 }
 \description{
 Conductivity raster from boolean raster. Can be useful if one has a road raster generated
@@ -21,10 +21,10 @@ will enhance the center of an object. In cases of roads (narrow elongated shape)
 will becone more apparent.
 }
 \examples{
-library(terra)
+library(raster)
 
 segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
-segmented_road <- rast(segmented_road)
+segmented_road <- raster(segmented_road)
 
 conductivity <- conductivity_from_bool(segmented_road)
 plot(conductivity)

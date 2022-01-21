@@ -9,7 +9,7 @@ find_road_branches(road, conductivity)
 \arguments{
 \item{road}{line (\code{sf} format). Knowed road.}
 
-\item{conductivity}{raster (\code{terra} format). Conductivity raster covering the road.}
+\item{conductivity}{raster (\code{raster} format). Conductivity raster covering the road.}
 }
 \value{
 lines (\code{sf} format) representing potential starting points of branching roads.
@@ -20,13 +20,13 @@ a conductivity raster and the line geometry of the main road.
 }
 \examples{
 library(sf)
-library(terra)
+library(raster)
 
 road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
 conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
 
 road <- st_read(road, "drived_road", quiet = TRUE)
-conductivity <- rast(conductivity)
+conductivity <- raster(conductivity)
 
 road_branches <- find_road_branches(road, conductivity)
 

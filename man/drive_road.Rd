@@ -9,7 +9,7 @@ drive_road(starting_road, conductivity, fov = 45, radius = 10, cost_max = NULL)
 \arguments{
 \item{starting_road}{line (\code{sf} format)}
 
-\item{conductivity}{raster (\code{terra} format)}
+\item{conductivity}{raster (\code{raster} format)}
 
 \item{fov}{numeric. Field of view (degrees) ahead of the search vector.}
 
@@ -27,12 +27,13 @@ Attempt to drive along an unknown road in a conductivity raster starting only wi
 of road segment pointing in the right direction.
 }
 \examples{
-library(terra)
+library(raster)
 library(sf)
 
 conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
 drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
-conductivity <- rast(conductivity)
+
+conductivity <- raster(conductivity)
 starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
 
 res <- drive_road(starting_line, conductivity)
