@@ -7,7 +7,7 @@
 find_road_branches(road, conductivity)
 }
 \arguments{
-\item{road}{line (\code{sf} format). Knowed road.}
+\item{road}{line (\code{sf} format). Known road.}
 
 \item{conductivity}{raster (\code{raster} format). Conductivity raster covering the road.}
 }
@@ -27,10 +27,11 @@ conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFPr
 
 road <- st_read(road, "drived_road", quiet = TRUE)
 conductivity <- raster(conductivity)
+conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
 
-road_branches <- find_road_branches(road, conductivity)
+road_branches <- find_road_branches_2(road, conductivity)
 
 plot(conductivity, col = viridis::viridis(50))
 plot(road, col = "green", lwd = 3, add = TRUE)
-plot(road_branches, col = "red", add = TRUE)
+plot(road_branches, col = "red", add = TRUE, lwd = 3)
 }
