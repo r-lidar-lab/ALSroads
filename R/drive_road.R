@@ -1,25 +1,13 @@
-# Very similar to st_ends_heading()
-get_heading <- function(from, to)
-{
-  M <- rbind(from, to)
-  Ax <- M[2,1]
-  Ay <- M[2,2]
-  Bx <- M[1,1]
-  By <- M[1,2]
-  heading <- atan2(Ay-By, Ax-Bx)
-}
-
 #' Drive along an unknown road
 #'
-#' Attempt to drive along an unknown road in a conductivity raster starting only with a small piece
+#' Drive along an unknown road in a conductivity raster starting only with a small piece
 #' of road segment pointing in the right direction.
 #'
 #' @param starting_road  line (\code{sf} format)
 #' @param conductivity  raster (\code{raster} format)
 #' @param fov  numeric. Field of view (degrees) ahead of the search vector.
-#' @param radius  numeric (distance unit). Search radius used to find the next most probable point on the road.
-#' @param cost_max  numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
-#' If no value is provided \code{radius * 6} will be used.
+#' @param sightline  numeric (distance unit). Search distance used to find the next most probable
+#' point on the road.
 #'
 #' @return list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector
 #' of cost at each invidual vertices of the line.
@@ -32,76 +20,64 @@ get_heading <- function(from, to)
 #' drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
 #'
 #' conductivity <- raster(conductivity)
-#' starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
+#' starting_road <- st_read(drived_road, "starting_road", quiet = TRUE)
 #'
-#' res <- drive_road(starting_line, conductivity)
+#' res <- drive_road(starting_road, conductivity)
 #'
 #' plot(conductivity, col = viridis::viridis(50))
-#' plot(res$line, add = TRUE, col = "red", lwd = 2)
-#' plot(starting_line, add = TRUE, col = "green", lwd = 3)
+#' plot(starting_road, add = TRUE, col = "green", lwd = 3)
+#' plot(res$newline, add = TRUE, col = "red", lwd = 2)
 #' plot(res$cost, type = "l")
-drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_max = NULL)
+drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 {
-  if (is.null(cost_max)) cost_max <- radius * 6
+  # The idea is to only extract values that are mostly ahead of the line
 
+  t0 <- Sys.time()
+
+  # Threshold of cost to stop the search.
+  cost_max <- sightline * 6
+
+  # Constant definition
+  buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
+
+  # We need an orthonormal raster
   resolution <- raster::res(conductivity)
   if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
   resolution <- resolution[1]
 
-  # Initialisation of list of coordinates with starting line
-  start_coords <- sf::st_coordinates(starting_road)
-  start_coords[,3] <- 0
-  list_coords <- list(start_coords[1,], start_coords[2,])
+  # Initialization of list of coordinates with starting line
+  start_pts <- sf::st_geometry(sf::st_cast(starting_road, "POINT"))
+  if (length(start_pts) > 2)  stop("'starting_road' line must must be a two points segment", call. = FALSE)
+  start <- start_pts[1][[1]]
+  end   <- start_pts[2][[1]]
+  list_coords <- list(start, end)
+  heading <- get_heading(start, end)
 
-  # Crop conductivity raster
-  # The idea is to only extract values that are mostly ahead of the line
-  p1 <- list_coords[[1]]
-  p2 <- list_coords[[2]]
-  heading <- get_heading(p1, p2)
+  sub_aoi_conductivity <- query_conductivity_aoi(conductivity, starting_road)
+  resolution <- raster::res(sub_aoi_conductivity)[1]
+  #plot(conductivity, col = viridis::viridis(50))
+  #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
+  #plot(starting_road, add = T, lwd = 3, col = "red")
 
-  buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
-
-  aoi <- starting_road |>
-    st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
-    sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
-    sf::as_Spatial()
-
-  conductivity_crop <- raster::crop(conductivity, aoi)
-
-  resolution_min <- 2  # Could be set as a parameter
-  if (resolution < resolution_min)
-  {
-    agg_factor <- ceiling(resolution_min / resolution)
-    resolution <- resolution * agg_factor
-    cat("Step 0: downsample conductivity to", resolution, "m\n")
-    conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
-  }
-
-  if (radius < resolution) stop("Radius must be equal or larger than resolution of 'conductivity' raster.", call. = FALSE)
-
-  # Set possible search angles
-  angular_resolution <- floor((resolution / radius) * (180 / pi))
+  # Init view angles as a function of the resolution of the raster and the sightline
+  angular_resolution <- floor((resolution / sightline) * (180 / pi))
   angles <- seq(angular_resolution, fov, angular_resolution)
   angles <- c(rev(-angles), 0, angles)
   angles_rad <- angles * pi / 180
 
-  # Set penalty coefficient for each search angle
+  # Set penalty coefficient for each view angle
   penalty_at_45_degrees <- 1.5  # Could be set as a parameter
   penalty <- abs(angles) / fov
   penalty <- penalty * (penalty_at_45_degrees - 1) + 1
 
-  # Transition matrix
-  cat("Step 1: computation of the transition matrix\n")
-  trans <- conductivity_crop |>
-    transition()
-
   # Loop initialisation
-  cost_selected <- 0
+  current_cost <- 0
   k <- 2
-  cat("Step 2: driving the conductivity raster\n")
-  while (cost_selected <= cost_max)
+  cat("Driving the conductivity raster\n")
+  while (current_cost <= cost_max)
   {
-    if (k %% 5 == 0) cat(" | ", (k-1)*10, " m", sep = "")
+    if (k %% 2 == 0) cat("", (k-1)*10, " m\r", sep = "")
+    flush.console()
 
     # Compute heading from the two previous points
     p1 <- list_coords[[k-1]]
@@ -109,83 +85,93 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
     heading <- get_heading(p1, p2)
 
     # Create all possible ends ahead of the previous point
-    X <- p2[1] + radius * cos(heading + angles_rad)
-    Y <- p2[2] + radius * sin(heading + angles_rad)
-
+    X <- p2[1] + sightline * cos(heading + angles_rad)
+    Y <- p2[2] + sightline * sin(heading + angles_rad)
     M <- data.frame(X,Y)
-    ends <- sf::st_as_sf(M, coords = c("X", "Y")) |>
-      sf::as_Spatial()
 
-    # Check if some ends fall outside of the cropped conductivity raster
-    val <- raster::extract(conductivity_crop, M)
+    # Generate a very small area of interest to analyse
+    start <- sf::st_sfc(p2)
+    ends <- sf::st_as_sf(M, coords = c("X", "Y"))
+    search_zone <- sf::st_bbox(c(start, sf::st_geometry(ends))) + c(-1,-1,1,1)*resolution
+    aoi <- raster::crop(sub_aoi_conductivity, search_zone)
+    #plot(aoi, col = viridis::viridis(50))
+    #plot(start, add = T, pch = 19, col = "red")
+    #plot(ends, pch = 19, add = T, col = "red")
+
+    # Compute the transition matrix for this AOI
+    trans <- transition(aoi)
+
+    # Check if some ends fall outside of the AOI conductivity raster
+    # If any reload another raster part further ahead.
+    val <- raster::extract(aoi, M)
     if (any(is.na(val)))
     {
-      # Make a newly cropped conductivity raster further ahead
-      line <- c(p1[1:2], p2[1:2]) |>
-        matrix(ncol = 2, byrow = TRUE) |>
-        sf::st_linestring() |>
-        sf::st_sfc(crs = sf::st_crs(starting_road))
+      cat("\nReaching bounds of AOI. Loading next AOI\n")
 
-      aoi <- line |>
+      # Make a newly sub aoi conductivity raster further ahead
+      line <- sf::st_cast(c(p1, p2), "LINESTRING")
+      new_aoi_poly <- line |>
         st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
         sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
-        sf::as_Spatial()
+        sf::st_sfc() |>
+        sf::st_set_crs(sf::st_crs(starting_road))
 
-      conductivity_crop <- raster::crop(conductivity, aoi)
-
-      resolution <- raster::res(conductivity)[1]
-      resolution_min <- 2  # Could be set as a parameter
-      if (resolution < resolution_min)
-      {
-        agg_factor <- ceiling(resolution_min / resolution)
-        resolution <- resolution * agg_factor
-        conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
-      }
+      sub_aoi_conductivity <- query_conductivity_aoi(conductivity, new_aoi_poly)
 
       # Check again if some ends fall outside of the newly cropped conductivity raster
-      val <- raster::extract(conductivity_crop, M)
-      if (any(is.na(val)))
-      {
+      val <- raster::extract(sub_aoi_conductivity, M)
+      if (any(is.na(val))) {
         warning("Drive stopped early. Edge of conductivity raster has been reached.", call. = FALSE)
         cost_max <- -Inf
       }
 
-      # Generate a new transition matrix
-      trans <- conductivity_crop |>
-        transition()
+      # Re-extract the AOI and recompute the transition
+      aoi <- raster::crop(sub_aoi_conductivity, search_zone)
+      trans <- transition(aoi)
     }
 
     # Find cost of each edge point
-    start <- sf::st_point(p2) |>
-      sf::st_sfc() |>
-      sf::as_Spatial()
-    cost <- as.numeric(gdistance::costDistance(trans, start, ends)) |> suppressWarnings()
+    cost <- as.numeric(gdistance::costDistance(trans, sf::as_Spatial(start), sf::as_Spatial(ends))) |> suppressWarnings()
     cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
-
-    # Adjust cost based on angle penalties
-    # and smooth value of adjacent points
     cost2 <- ma(cost * penalty)
+    ends$cost <- cost2
+    #plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
+    #plot(ends, pal = viridis::viridis, pch = 19, add = T)
+    #plot(p1, col = "red", pch = 19, add = T)
+    #plot(p2, col = "red", pch = 19, add = T)
 
     # Select point coordinates with the lowest
     # penalty adjusted cost
     idx_min <- which.min(cost2)
-    cost_selected <- cost[idx_min]
-    W <- M[idx_min,] |>
-      as.matrix() |>
-      cbind(cost_selected)
+    current_cost <- cost[idx_min]
+    W <- M[idx_min,] |> as.matrix() |> sf::st_point()
 
     # Save the least-cost pixel coordinates
     k <- k + 1
     list_coords[[k]] <- W
   }
 
-  m_coords <- do.call(rbind, list_coords)
-  newline <- m_coords[-nrow(m_coords), 1:2] |>
+  newline <- sf::st_sfc(list_coords) |>
+    sf::st_coordinates() |>
     sf::st_linestring() |>
-    sf::st_sfc(crs = sf::st_crs(starting_road)) |>
+    sf::st_sfc() |>
+    sf::st_set_crs(sf::st_crs(starting_road)) |>
     sf::st_simplify(dTolerance = 2)
 
-  return(list(line = newline, cost = m_coords[,3]))
+  tf <- Sys.time()
+  dt <- tf-t0
+  dt <- round(units::as_units(dt),1)
+  dist <- sf::st_length(newline)
+  hdt = dt
+  units(hdt) <- units::make_units(h)
+  units(dist) <- units::make_units(km)
+  dist = round(dist, 2)
+  speed = round(dist/hdt)
+  cat("Processed ended in", dt, units::deparse_unit(dt),
+      ": road of", dist, units::deparse_unit(dist),
+      "driven at", speed, units::deparse_unit(speed))
+
+  return(newline)
 }
 
 #' Find potential secondary roads from main road
@@ -200,16 +186,15 @@ drive_road <- function(starting_road, conductivity, fov = 45, radius = 10, cost_
 #' @export
 #' @examples
 #' library(sf)
-#' library(raster)
+#' library(terra)
 #'
 #' road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
 #' conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
 #'
 #' road <- st_read(road, "drived_road", quiet = TRUE)
-#' conductivity <- raster(conductivity)
-#' conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
+#' conductivity <- rast(conductivity)
 #'
-#' road_branches <- find_road_branches_2(road, conductivity)
+#' road_branches <- find_road_branches(road, conductivity)
 #'
 #' plot(conductivity, col = viridis::viridis(50))
 #' plot(road, col = "green", lwd = 3, add = TRUE)
@@ -218,6 +203,19 @@ find_road_branches <- function(road, conductivity)
 {
   if (is(conductivity, "RasterLayer"))
     conductivity <- terra::rast(conductivity)
+
+  resolution <- terra::res(conductivity)
+  if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
+  resolution <- resolution[1]
+
+  resolution_min <- 2  # Could be set as a parameter
+  if (resolution < resolution_min)
+  {
+    agg_factor <- ceiling(resolution_min / resolution)
+    resolution <- resolution * agg_factor
+    cat("Step 0: downsample conductivity to", resolution, "m\n")
+    conductivity_crop <- terra::aggregate(conductivity, fact = agg_factor, fun = mean, na.rm = TRUE)
+  }
 
   # 3 levels of buffer around the road
   d1 <-3
@@ -365,39 +363,45 @@ conductivity_from_bool <- function(x, w_max = 15)
   return(conductivity)
 }
 
-st_ends_heading <- function(line)
+# Very similar to st_ends_heading()
+get_heading <- function(from, to)
 {
-  M <- sf::st_coordinates(line)
-  i <- c(2, nrow(M) - 1)
-  j <- c(1, -1)
-
-  headings <- mapply(i, j, FUN = function(i, j) {
-    Ax <- M[i-j,1]
-    Ay <- M[i-j,2]
-    Bx <- M[i,1]
-    By <- M[i,2]
-    unname(atan2(Ay-By, Ax-Bx))
-  })
-
-  return(headings)
+  from <- sf::st_coordinates(from)
+  to   <- sf::st_coordinates(to)
+  M <- rbind(from, to)
+  Ax <- M[2,1]
+  Ay <- M[2,2]
+  Bx <- M[1,1]
+  By <- M[1,2]
+  heading <- atan2(Ay-By, Ax-Bx)
 }
 
-st_extend_line <- function(line, distance, end = "BOTH")
+query_conductivity_aoi <- function(conductivity, starting_road)
 {
-  if (!(end %in% c("BOTH", "HEAD", "TAIL")) | length(end) != 1) stop("'end' must be 'BOTH', 'HEAD' or 'TAIL'")
+  resolution <- raster::res(conductivity)[1]
 
-  M <- sf::st_coordinates(line)[,1:2]
-  keep <- !(end == c("TAIL", "HEAD"))
+  buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
 
-  ends <- c(1, nrow(M))[keep]
-  headings <- st_ends_heading(line)[keep]
-  distances <- if (length(distance) == 1) rep(distance, 2) else rev(distance[1:2])
+  aoi <- starting_road |>
+    st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
+    sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT")
+  #plot(aoi, add = T, col= "red")
+  #plot(starting_road, add = T, lwd = 3)
 
-  M[ends,] <- M[ends,] + distances[keep] * c(cos(headings), sin(headings))
-  newline <- sf::st_linestring(M)
+  conductivity_crop <- raster::crop(conductivity, sf::as_Spatial(aoi))
+  #plot(conductivity_crop, col = viridis::viridis(50))
+  #plot(starting_road, add = T, lwd = 3, col = "red")
 
-  # If input is sfc_LINESTRING and not sfg_LINESTRING
-  if (is.list(line)) newline <- sf::st_sfc(newline, crs = sf::st_crs(line))
+  resolution_min <- 2  # Could be set as a parameter
+  if (resolution < resolution_min)
+  {
+    agg_factor <- ceiling(resolution_min / resolution)
+    resolution <- resolution * agg_factor
+    cat("Downsampling conductivity to", resolution, "m\n")
+    conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
+  }
 
-  return(newline)
+  conductivity_crop[is.na(conductivity_crop)] <- 0
+
+  return(conductivity_crop)
 }

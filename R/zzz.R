@@ -6,7 +6,7 @@
     MFFProads.debug.measuring = FALSE,
     MFFProads.debug.metrics = FALSE,
     MFFProads.debug.verbose = FALSE,
-    MFFProads.debug.progress = TRUE,
+    MFFProads.debug.progress = FALSE,
     MFFProads.debug = FALSE)
 
   toset <- !(names(op.MFFProads) %in% names(op))
