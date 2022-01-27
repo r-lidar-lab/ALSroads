@@ -20,12 +20,3 @@ by classification algorithm and whant to extract centerlines from it. The moving
 will enhance the center of an object. In cases of roads (narrow elongated shape), the centerline
 will becone more apparent.
 }
-\examples{
-library(raster)
-
-segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
-segmented_road <- raster(segmented_road)
-
-conductivity <- conductivity_from_bool(segmented_road)
-plot(conductivity)
-}

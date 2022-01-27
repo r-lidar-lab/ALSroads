@@ -4,7 +4,7 @@
 \alias{drive_road}
 \title{Drive along an unknown road}
 \usage{
-drive_road(starting_road, conductivity, fov = 45, radius = 10, cost_max = NULL)
+drive_road(starting_road, conductivity, fov = 45, sightline = 10)
 }
 \arguments{
 \item{starting_road}{line (\code{sf} format)}
@@ -13,33 +13,30 @@ drive_road(starting_road, conductivity, fov = 45, radius = 10, cost_max = NULL)
 
 \item{fov}{numeric. Field of view (degrees) ahead of the search vector.}
 
-\item{radius}{numeric (distance unit). Search radius used to find the next most probable point on the road.}
-
-\item{cost_max}{numeric. Maximal cost allowed in the conductivity raster for point candidate to continue the search.
-If no value is provided \code{radius * 6} will be used.}
+\item{sightline}{numeric (distance unit). Search distance used to find the next most probable
+point on the road.}
 }
 \value{
 list, \code{line} being the road found (as \code{sfc}) and \code{cost} a numeric vector
 of cost at each invidual vertices of the line.
 }
 \description{
-Attempt to drive along an unknown road in a conductivity raster starting only with a small piece
+Drive along an unknown road in a conductivity raster starting only with a small piece
 of road segment pointing in the right direction.
 }
 \examples{
 library(raster)
 library(sf)
 
-conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
-drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
+conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "MFFProads")
+starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "MFFProads")
 
 conductivity <- raster(conductivity)
-starting_line <- st_read(drived_road, "starting_road", quiet = TRUE)
+starting <- st_read(starting, "starting_road", quiet = TRUE)
 
-res <- drive_road(starting_line, conductivity)
+res <- drive_road(starting, conductivity)
 
 plot(conductivity, col = viridis::viridis(50))
-plot(res$line, add = TRUE, col = "red", lwd = 2)
-plot(starting_line, add = TRUE, col = "green", lwd = 3)
-plot(res$cost, type = "l")
+plot(starting, add = TRUE, col = "green", lwd = 3)
+plot(res, add = TRUE, col = "red", lwd = 2)
 }

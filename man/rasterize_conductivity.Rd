@@ -17,18 +17,12 @@ rasterize_conductivity(
 \item{dtm}{RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
 available it can be given to the function.}
 
-\item{dtm}{RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
-available it can be given to the function.}
-
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
 
 \item{...}{ignored}
 }
 \value{
 a RasterLayer or SpatRaster
-}
-\value{
-a RasterLayer
 }
 \description{
 Compute the conductivity raster sigma from lidar data according to Roussel et al. 2020

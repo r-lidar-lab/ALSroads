@@ -20,16 +20,15 @@ a conductivity raster and the line geometry of the main road.
 }
 \examples{
 library(sf)
-library(raster)
+library(terra)
 
-road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
-conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
+road <- system.file("extdata", "j53e_drived_road.gpkg", package="MFFProads")
+conductivity <- system.file("extdata", "j53e_conductivity.tif", package="MFFProads")
 
 road <- st_read(road, "drived_road", quiet = TRUE)
-conductivity <- raster(conductivity)
-conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
+conductivity <- rast(conductivity)
 
-road_branches <- find_road_branches_2(road, conductivity)
+road_branches <- find_road_branches(road, conductivity)
 
 plot(conductivity, col = viridis::viridis(50))
 plot(road, col = "green", lwd = 3, add = TRUE)

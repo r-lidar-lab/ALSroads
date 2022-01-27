@@ -16,18 +16,17 @@
 #' library(raster)
 #' library(sf)
 #'
-#' conductivity <- system.file("extdata", "drived_conductivity.tif", package = "MFFProads")
-#' drived_road <- system.file("extdata", "drived_road.gpkg", package = "MFFProads")
+#' conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "MFFProads")
+#' starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "MFFProads")
 #'
 #' conductivity <- raster(conductivity)
-#' starting_road <- st_read(drived_road, "starting_road", quiet = TRUE)
+#' starting <- st_read(starting, "starting_road", quiet = TRUE)
 #'
-#' res <- drive_road(starting_road, conductivity)
+#' res <- drive_road(starting, conductivity)
 #'
 #' plot(conductivity, col = viridis::viridis(50))
-#' plot(starting_road, add = TRUE, col = "green", lwd = 3)
-#' plot(res$newline, add = TRUE, col = "red", lwd = 2)
-#' plot(res$cost, type = "l")
+#' plot(starting, add = TRUE, col = "green", lwd = 3)
+#' plot(res, add = TRUE, col = "red", lwd = 2)
 drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 {
   # The idea is to only extract values that are mostly ahead of the line
@@ -188,8 +187,8 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 #' library(sf)
 #' library(terra)
 #'
-#' road <- system.file("extdata", "drived_road.gpkg", package="MFFProads")
-#' conductivity <- system.file("extdata", "drived_conductivity.tif", package="MFFProads")
+#' road <- system.file("extdata", "j53e_drived_road.gpkg", package="MFFProads")
+#' conductivity <- system.file("extdata", "j53e_conductivity.tif", package="MFFProads")
 #'
 #' road <- st_read(road, "drived_road", quiet = TRUE)
 #' conductivity <- rast(conductivity)
@@ -343,14 +342,6 @@ find_road_branches <- function(road, conductivity)
 #'
 #' @return  raster (\code{raster} format) of conductivity with values ranging from 0 to 1.
 #' @export
-#' @examples
-#' library(raster)
-#'
-#' segmented_road <- system.file("extdata", "segmented_road.tif", package="MFFProads")
-#' segmented_road <- raster(segmented_road)
-#'
-#' conductivity <- conductivity_from_bool(segmented_road)
-#' plot(conductivity)
 conductivity_from_bool <- function(x, w_max = 15)
 {
   if ((w_max %% 2 == 0) | (w_max <= 3)) stop("'w_max' must be an odd number over 3.", call. = FALSE)
