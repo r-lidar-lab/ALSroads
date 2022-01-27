@@ -10,27 +10,71 @@
 #' @param list. parameters
 #'
 #' @noRd
-least_cost_path = function(las, centerline, dtm, water, param)
+least_cost_path = function(las, centerline, dtm, conductivity, water, param)
 {
-  # Compute the limit polygon and mask the DTM
-  hold <- sf::st_buffer(centerline, param[["extraction"]][["road_buffer"]])
-  dtm  <- raster::crop(dtm, hold)
-  dtm  <- raster::mask(dtm, hold)
+  display <- getOption("MFFProads.debug.finding")
 
-  # If the DTM has a resolution more than 1 m, aggregate to 1 m. No need of a 50 cm DTM. If the resolution
-  # is less than 1 meter, abort.
-  res <- round(raster::res(dtm)[1], 2)
-  if (res < 1)
-    dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
-  else if (res > 1)
-    stop("The DTM must have a resolution of 1 m or less.")
+  if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
+  if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
 
-  # Compute high resolution conductivity map (1 m). The function is capable to return all intermediate
-  # conductivity layer but it is for debugging and illustration purpose. We only need the final conductivity
-  sigma <- grid_conductivity(las, centerline, dtm, water, param, return_all = FALSE)$conductivity
+  # Compute the limit polygon where we actually need to work
+  # This allows to crop the raster (DTM or conductivty) and extract
+  # only the part we are working with
+  hold <- sf::st_buffer(centerline, param[["extraction"]][["road_buffer"]] + 2)
+
+  # Clip and mask the conductivity (if provided)
+  # If the conductivity has a resolution more than 2 m, aggregate to 2 m.
+  # If the resolution is less than 2 meter, abort.
+  if (!is.null(conductivity))
+  {
+    conductivity <- raster::crop(conductivity, hold)
+    conductivity <- raster::mask(conductivity, hold)
+
+    res <- round(raster::res(conductivity)[1], 2)
+
+    if (res > 2)
+      stop("The conductivity must have a resolution of 1 m or less.")
+
+    if (res < 2)
+      conductivity <- raster::aggregate(conductivity, fact = 2/res, fun = mean, na.rm = TRUE)
+  }
+
+  # If no conductivity is provided it means that the DTM is. We compute the conductivity
+  if (is.null(conductivity))
+  {
+    verbose("Computing conductivity maps...\n")
+    conductivity <- rasterize_conductivity(las, dtm, param, return_all = FALSE, return_stack = FALSE)
+  }
+
+  # Handle bridge case:
+  # If a road crosses a water body it builds a bridge, i.e. a polygon in which we will
+  # force a conductivity of 1 later
+  bridge = NULL
+  if (!is.null(water) && length(water) > 0)
+  {
+    id <- NULL
+    water <- sf::st_geometry(water)
+    bbox <- suppressWarnings(sf::st_bbox(las))
+    bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
+    water <- sf::st_crop(water, bbox)
+    bridge <- sf::st_intersection(sf::st_geometry(centerline), water)
+    if (length(bridge) > 0) bridge <- sf::st_buffer(bridge, 5)
+    conductivity <- raster::mask(conductivity, sf::as_Spatial(water), inverse = TRUE)
+  }
+
+  if (length(bridge) > 0)
+  {
+    cells <- raster::cellFromPolygon(conductivity, sf::as_Spatial(bridge))
+    cells <- unlist(cells)
+    tmp   <- conductivity
+    tmp[cells] <- 1
+    conductivity <- tmp
+
+    if (display) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
+  }
 
   # Compute low resolution conductivity with mask
-  sigma <- mask_conductivity(sigma, centerline, param)
+  conductivity <- mask_conductivity(conductivity, centerline, param)
 
   # Compute start and end points
   AB <- start_end_points(centerline, param)
@@ -38,7 +82,7 @@ least_cost_path = function(las, centerline, dtm, water, param)
   B  <- AB$B
 
   # Compute the transition
-  trans <- transition(sigma)
+  trans <- transition(conductivity)
 
   # Find the path
   verbose("Computing least cost path...\n")
@@ -47,24 +91,22 @@ least_cost_path = function(las, centerline, dtm, water, param)
   return(path)
 }
 
-#' Aggregate the conductivity and modify some pixels
+#' Mask the conductivity and modify some pixels
 #'
-#' Aggregate the conductivity  to a resolution of two meters and update some pixels by masking
-#' the map with the bounding polygon, multiplying by a distance to road cost factor (not described
-#' in the paper) and add terminal caps conductive pixels to allow driving from the point A and B
-#' further apart the road
+#' Update some pixels by masking the map with the bounding polygon, multiplying by a distance to
+#' road cost factor (not described in the paper) and add terminal caps conductive pixels
+#'  to allow driving from the point A and B further apart the road
 #' @noRd
 mask_conductivity <- function(conductivity, centerline, param)
 {
   verbose("Computing conductivity masks...\n")
 
-  # Aggregation and boundary masking
+  # Boundary masking
   hull <- sf::st_buffer(centerline, param$extraction$road_buffer)
-  conductivity <- raster::aggregate(conductivity, fact = 2, fun = mean, na.rm = TRUE)
   conductivity <- raster::mask(conductivity, hull)
 
   if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
-  verbose("   - Aggregation and masking\n")
+  verbose("   - Masking\n")
 
   # Penalty factor based on distance-to-road.
   # Actually small penalty since this part was not very successful. Not described in the paper.

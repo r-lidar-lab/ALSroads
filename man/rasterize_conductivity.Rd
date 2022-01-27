@@ -6,7 +6,6 @@
 \usage{
 rasterize_conductivity(
   las,
-  res = 1,
   dtm = NULL,
   param = mffproads_default_parameters,
   ...
@@ -15,12 +14,18 @@ rasterize_conductivity(
 \arguments{
 \item{las}{an object of class LAS or LAScatalog from lidR}
 
-\item{res}{numeric. Resolution of the output. If DTM is not NULL res is the resolution of the DTM}
+\item{dtm}{RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
+available it can be given to the function.}
 
 \item{dtm}{RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
 available it can be given to the function.}
 
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
+
+\item{...}{ignored}
+}
+\value{
+a RasterLayer or SpatRaster
 }
 \value{
 a RasterLayer
