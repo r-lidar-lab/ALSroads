@@ -14,7 +14,7 @@
 #'
 #' @return The same object as \code{roads} but with corrected ending such that roads are connected.
 #' @examples
-#' f <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+#' f <- system.file("extdata", "j53e_network.gpkg", package="MFFProads")
 #'
 #' ref <- sf::st_read(f, layer = "original")  # input of measure_roads
 #' cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
@@ -22,7 +22,16 @@
 #'
 #' plot(sf::st_geometry(ref), xlim = c(260800, 261000), ylim = c(5250400, 5250650), col = "red")
 #' plot(sf::st_geometry(cor), col = "blue", add = TRUE)
-#' plot(sf::st_geometry(res), col = "darkgreen", add = TRUE)
+#' plot(sf::st_geometry(res), col = "green", add = TRUE, lwd = 2)
+#'
+#' domain <- "https://servicesmatriciels.mern.gouv.qc.ca:443"
+#' path <- "/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/"
+#' tiles <- "GoogleMapsCompatibleExt2:epsg:3857/{z}/{y}/{x}.jpg"
+#' url <- paste0(domain, path, tiles)
+#' m = mapview::mapview(list(ref, cor, res),
+#'   layer.name = c("Inaccurate", "Corrected", "Snapped"),
+#'   color = c("red", "blue", "green"), map.type = "Esri.WorldImagery")
+#' leaflet::addTiles(m@map, url)
 #' @export
 st_snap_lines = function(roads, ref, tolerance = 30, field = NULL)
 {

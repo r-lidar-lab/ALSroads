@@ -4,10 +4,10 @@
 #' (see references)
 #'
 #' @param las an object of class LAS or LAScatalog from lidR
-#' @param res numeric. Resolution of the output. If DTM is not NULL res is the resolution of the DTM
 #' @param dtm RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
 #' available it can be given to the function.
 #' @param param a list of many parameters. See \link{mffproads_default_parameters}.
+#' @param ... ignored
 #'
 #' @examples
 #' library(lidR)
@@ -25,35 +25,51 @@
 #' sigma <- rasterize_conductivity(ctg, dtm = dtm)
 #' plot(sigma, col = viridis::viridis(30))
 #' }
-#' @return a RasterLayer
+#' @return a RasterLayer or SpatRaster
 #' @export
-rasterize_conductivity <- function(las, res = 1, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity <- function(las, dtm = NULL, param = mffproads_default_parameters, ...)
 {
   UseMethod("rasterize_conductivity", las)
 }
 
 #' @export
-rasterize_conductivity.LAS <- function(las, res = 1, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_default_parameters, ...)
 {
-  if (is.null(dtm))
-    dtm <- lidR::rasterize_terrain(las, res, lidR::tin(), pkg = "raster")
-  else if (lidR:::is_raster(dtm))
-    dtm <- lidR:::raster_crop(dtm, lidR::st_bbox(las))
-  else
-    stop("dtm must be a raster or must be NULL")
-
-  res <- lidR:::raster_res(dtm)[1]
-
-  use_intensity <- "Intensity" %in% names(las@data)
+  use_intensity <- "Intensity" %in% names(las)
   display <- getOption("MFFProads.debug.finding")
   dots <- list(...)
   return_all <- isTRUE(dots$return_all)
   return_stack <- isTRUE(dots$return_stack)
+  no_aggregate <- isTRUE(dots$no_aggregate)
+  pkg <- if (is.null(dtm)) getOption("lidR.raster.default") else lidR:::raster_pkg(dtm)
 
-  nlas <- suppressMessages(lidR::normalize_height(las, dtm, na.rm = TRUE))
+  if (is.null(dtm))
+  {
+    dtm <- lidR::rasterize_terrain(las, 1, lidR::tin(), pkg = "raster")
+  }
+  else if (lidR:::is_raster(dtm))
+  {
+    res <- round(raster::res(dtm)[1], 2)
+    if (res > 1) stop("The DTM must have a resolution of 1 m or less.")
+
+    dtm <- raster::crop(dtm, lidR::extent(las))
+
+    if (res < 1)
+      dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
+  }
+  else
+  {
+    stop("dtm must be a RasterLayer or must be NULL")
+  }
+
+  # Force to use raster
+  if (lidR:::raster_pkg(dtm) == "terra")
+    dtm <- raster::raster(dtm)
+
+  nlas <- lidR::normalize_height(las, dtm) |> suppressMessages() |> suppressWarnings()
 
   # Terrain metrics using the raster package (slope, roughness)
-  terrain   <- raster::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
+  terrain   <- terra::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
   slope     <- terrain$slope
   roughness <- terrain$roughness
 
@@ -97,8 +113,8 @@ rasterize_conductivity.LAS <- function(las, res = 1, dtm = NULL, param = mffproa
     # Switch Z and Intensity trick to use fast lidR internal function
     Z <- nlas$Z
     nlas@data[["Z"]] <-  nlas@data[["Intensity"]]
-    imax <- lidR:::rasterize_fast(nlas, dtm, 0, "max")
-    imin <- lidR:::rasterize_fast(nlas, dtm, 0, "min")
+    imax <- lidR:::rasterize_fast(nlas, dtm, 0, "max", pkg = "raster")
+    imin <- lidR:::rasterize_fast(nlas, dtm, 0, "min", pkg = "raster")
     irange <- imax - imin
     nlas@data[["Z"]] <- Z
 
@@ -164,106 +180,54 @@ rasterize_conductivity.LAS <- function(las, res = 1, dtm = NULL, param = mffproa
   sigma <- sigma_s *sigma_lp * sigma_e * (2 * sigma_d + sigma_chm + sigma_r + sigma_i)
   sigma <- sigma/max_coductivity
 
-  verbose("   - Global conductivity map\n")
-
   if (display) raster::plot(sigma, col = viridis::inferno(15), main = "Conductivity 1m")
+  verbose("   - Global conductivity map\n")
 
   # The output is sigma but we can also return everything to illustrate the paper
   if (!return_all & return_stack) {
     out <- raster::stack(sigma)
     names(out) <- "conductivity"
-  } else if (!return_all & return_stack) {
+  } else if (!return_all & !return_stack) {
     out <- sigma
   } else {
     out <- raster::stack(slope, roughness, sigma_s, sigma_r, sigma_e, chm, sigma_chm, d, sigma_d, irange, sigma_i, sigma_lp, sigma)
     names(out) <- c("slope", "roughness", "conductivity_slope", "conductivity_roughness", "conductivity_edge", "chm", "conductivity_chm", "density", "conductivity_density", "intensity", "conductivity_intensity", "conductivity_bottom", "conductivity")
   }
 
+  if (!no_aggregate)
+    out <- raster::aggregate(out, fact = 2, fun = mean, na.rm = TRUE)
+
+  if (pkg == "terra")
+    out <- terra::rast(out)
+
   return(out)
 }
 
 #' @export
-rasterize_conductivity.LAScluster = function(las, res = 1, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAScluster = function(las, dtm = NULL, param = mffproads_default_parameters, ...)
 {
   x <- lidR::readLAS(las)
   if (lidR::is.empty(x)) return(NULL)
 
-  # crop the raster to the extent of the chunk because the raster can be a very large proxy
-  # that will be materialized by rasterize_conductivity.LAS
-  if (lidR:::is_raster(res)) res <- lidR:::raster_crop(res, lidR:::st_adjust_bbox(x, lidR:::raster_res(res)))
-
-  sigma <- rasterize_conductivity(x, res, dtm, param, ...)
+  sigma <- rasterize_conductivity(x, dtm, param, ...)
   sigma <- lidR:::raster_crop(sigma, lidR::st_bbox(las))
   return(sigma)
 }
 
 #' @export
-rasterize_conductivity.LAScatalog = function(las, res = 1, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAScatalog = function(las, dtm = NULL, param = mffproads_default_parameters, ...)
 {
-  if (lidR:::is_a_number(res))
-    lidR:::assert_all_are_non_negative(res)
-  else if (!lidR:::raster_is_supported(res))
-    stop("'res' must be a number or a raster.", call. = FALSE)
-
-  # subset the collection to the size of the layout (if any)
-  if (!lidR:::is_a_number(res)) las <- lidR::catalog_intersect(las, res)
-
   # Enforce some options
-  lidR::opt_select(las) <- "xyzci"
+  if (lidR::opt_select(las) == "*") lidR::opt_select(las) <- "xyzci"
 
   # Compute the alignment options including the case when res is a raster/stars/terra
-  alignment <- lidR:::raster_alignment(res)
+  alignment <- lidR:::raster_alignment(1)
 
   if (lidR::opt_chunk_size(las) > 0 && lidR::opt_chunk_size(las) < 2*alignment$res)
     stop("The chunk size is too small. Process aborted.", call. = FALSE)
 
   # Processing
   options <- list(need_buffer = TRUE, drop_null = TRUE, raster_alignment = alignment, automerge = TRUE)
-  output  <- lidR::catalog_apply(las, rasterize_conductivity, res = res, dtm = dtm, param = param, ..., .options = options)
+  output  <- lidR::catalog_apply(las, rasterize_conductivity, dtm = dtm, param = param, ..., .options = options)
   return(output)
-}
-
-
-#' Compute the conductivity raster sigma
-#'
-#' Compute the conductivity rasters sigma_s, sigma_e, sigma_r and so on and the final conductivity layer
-#' sigma
-#'
-#' @noRd
-grid_conductivity <- function(las, centerline, dtm, water = NULL, param, return_all = FALSE)
-{
-  verbose("Computing conductivity maps...\n")
-
-  # Handle bridge case:
-  # If a road crosses a water body it builds a bridge, i.e. a polygon in which we will
-  # force a conductivity of 1 later
-  bridge = NULL
-  if (!is.null(water) && length(water) > 0)
-  {
-    id <- NULL
-    water <- sf::st_geometry(water)
-    bbox <- suppressWarnings(sf::st_bbox(las))
-    bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
-    water <- sf::st_crop(water, bbox)
-    bridge <- sf::st_intersection(sf::st_geometry(centerline), water)
-    if (length(bridge) > 0) bridge <- sf::st_buffer(bridge, 5)
-  }
-
-  out <- rasterize_conductivity(las, 1, dtm, param, return_all = return_all, return_stack = TRUE)
-
-  if (!is.null(water) && length(water) > 0)
-    out <- raster::mask(out, sf::as_Spatial(water), inverse = TRUE)
-
-  if (length(bridge) > 0)
-  {
-    cells <- raster::cellFromPolygon(out$conductivity, sf::as_Spatial(bridge))
-    cells <- unlist(cells)
-    tmp   <- out$conductivity
-    tmp[cells] <- 1
-    out$conductivity <- tmp
-
-    if (display) raster::plot(out$conductivity, col = viridis::inferno(15), main = "Conductivity 1m with bridge")
-  }
-
-  return(out)
 }

@@ -7,8 +7,9 @@
 \usage{
 measure_road(
   ctg,
-  road,
-  dtm,
+  centerline,
+  dtm = NULL,
+  conductivity = NULL,
   water = NULL,
   param = mffproads_default_parameters,
   ...
@@ -18,6 +19,7 @@ measure_roads(
   ctg,
   roads,
   dtm,
+  conductivity = NULL,
   water = NULL,
   param = mffproads_default_parameters
 )
@@ -25,20 +27,23 @@ measure_roads(
 \arguments{
 \item{ctg}{a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package}
 
-\item{road}{a single line (sf format) used as reference to search and measure road.}
-
 \item{dtm}{RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
-with \link[lidR:grid_terrain]{grid_terrain}.}
+with \link[lidR:grid_terrain]{grid_terrain}. It can be missing if a conductivity layer is provided}
 
-\item{water}{a set of polygons (sf format) of water bodies. This is used to mask the water bodies
-so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows to
-detect bridges above water.}
+\item{conductivity}{RasterLayer storing the pre-computed conductivity. It can be NULL in this case
+if will be computed on the fly but the layer can be pre-computed with \link{rasterize_conductivity}}
+
+\item{water}{a set of spatial polygons (sf format) of water bodies. This is used to mask the water
+bodies so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows
+to detect bridges above water.}
 
 \item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
 
 \item{...}{unused}
 
-\item{roads}{multiples lines (sf format) used as reference to search and measure roads}
+\item{roads}{multiple lines (sf format) used as reference to search and measure the roads}
+
+\item{road}{a single linestring (sf format) used as reference to search and measure the road.}
 }
 \value{
 An sf object similar to the input with additional attributes and an updated geometry. If
@@ -48,12 +53,11 @@ SHOULDERS (average number of shoulders found), SINUOSITY, CONDUCTIVITY (conducti
 SCORE (a road state score) and CLASS (4 classes derived from the SCORE). See references
 }
 \description{
-From a reference road (line), extracts the line with a buffer from the point cloud and computes
-the exact positioning of the road (realignment). Then, using new the accurate  shape, computes
-road metrics including its width, its drivable width, sinuosity as well as its state in four
-classes (1. operating, 2. maybe operating, 3. maybe decommissioned, 4. decommissioned). The
-function \link{st_snap_lines} allows to post-process the output to fix minor inaccuracies and
-reconnect the roads than may no longer be connected because each road is processed independently.
+From a reference road (spatial line), extracts the line with a buffer from the point cloud and computes
+the exact positioning of the road (realignment). Then, using new the accurate shape, computes
+road metrics including its width, its drivable width, its sinuosity as well as its state in four
+classes. The function \link{st_snap_lines} allows to post-process the output to fix minor inaccuracies
+ and reconnect the roads that may no longer be connected because each road is processed independently.
 }
 \examples{
 library(lidR)
@@ -61,8 +65,8 @@ library(sf)
 library(raster)
 
 dir  <- system.file("extdata", "", package="MFFProads")
-road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
-dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="MFFProads")
+dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
 ctg  <- readLAScatalog(dir)
 road <- st_read(road, "original", quiet = TRUE)
 dtm  <- raster(dtm)
@@ -72,15 +76,16 @@ crs <- st_crs(road)
 st_geometry(road) <- st_geometry(road) + st_sfc(st_point(c(-8, 0)))
 st_crs(road) <- crs
 
-plot(dtm, col = gray.colors(25, 0, 1))
+plot(dtm, col = gray(1:50/50))
 plot(ctg, add = TRUE)
 plot(st_geometry(road), add = TRUE, col = "red")
 
-res <- measure_road(ctg, road, dtm)
+res <- measure_road(ctg, road, dtm = dtm)
 res
 poly <- sf::st_buffer(res, res$ROADWIDTH/2)
 
-plot(st_geometry(road), col = "red") # Inaccurate road track
+plot(dtm, col = gray(1:50/50))
+plot(st_geometry(road), col = "red", add = TRUE) # Inaccurate road track
 plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 
 domain <- "https://servicesmatriciels.mern.gouv.qc.ca:443"
@@ -93,22 +98,14 @@ m = mapview::mapview(list(road, poly),
 leaflet::addTiles(m@map, url)
 
 \dontrun{
-# DEBUG
+conductivity <- system.file("extdata", "j5gr_conductivity.tif", package="MFFProads")
+conductivity <- raster(conductivity)
+plot(conductivity, col = viridis::viridis(50))
 
-options(MFFProads.debug.finding = TRUE)
-options(MFFProads.debug.measuring = FALSE)
-options(MFFProads.debug.metrics = FALSE)
-res <- measure_road(ctg, road, dtm)
+res <- measure_road(ctg, road, conductivity = conductivity)
 
-options(MFFProads.debug.finding = FALSE)
-options(MFFProads.debug.measuring = TRUE)
-options(MFFProads.debug.metrics = FALSE)
-res <- measure_road(ctg, road, dtm)
-
-options(MFFProads.debug.finding = FALSE)
-options(MFFProads.debug.measuring = FALSE)
-options(MFFProads.debug.metrics = TRUE)
-res <- measure_road(ctg, road, dtm)
+plot(st_geometry(road), col = "red") # Inaccurate road track
+plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 }
 }
 \references{

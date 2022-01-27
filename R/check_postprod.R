@@ -11,7 +11,7 @@
 #' @examples
 #' library(sf)
 #'
-#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="MFFProads")
 #' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
 #'
@@ -62,7 +62,7 @@ check_road_differences <- function(roads, roads_ori, field)
 #' @examples
 #' library(sf)
 #'
-#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="MFFProads")
 #' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
 #'
@@ -134,7 +134,7 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' @examples
 #' library(sf)
 #'
-#' road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
+#' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="MFFProads")
 #' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
 #'
