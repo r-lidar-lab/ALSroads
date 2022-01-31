@@ -46,9 +46,9 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 
   # Initialization of list of coordinates with starting line
   start_pts <- sf::st_geometry(sf::st_cast(starting_road, "POINT"))
-  if (length(start_pts) > 2)  stop("'starting_road' line must must be a two points segment", call. = FALSE)
-  start <- start_pts[1][[1]]
-  end   <- start_pts[2][[1]]
+  n <- length(start_pts)
+  start <- start_pts[n-1][[1]]
+  end   <- start_pts[n][[1]]
   list_coords <- list(start, end)
   heading <- get_heading(start, end)
 
@@ -105,7 +105,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
     val <- raster::extract(aoi, M)
     if (any(is.na(val)))
     {
-      cat("\nReaching bounds of AOI. Loading next AOI\n")
+      #cat("\nReaching bounds of AOI. Loading next AOI\n")
 
       # Make a newly sub aoi conductivity raster further ahead
       line <- sf::st_cast(c(p1, p2), "LINESTRING")
@@ -237,6 +237,7 @@ find_road_branches <- function(road, conductivity)
   m_conductivity <- quantile(m_conductivity, na.rm = T, probs = 0.33)
 
   # Ensure continuity of the road
+  conductivity <- terra::crop(conductivity, terra::vect(buffer2))
   conductivity <- terra::mask(conductivity, terra::vect(buffer0), updatevalue = 1, inverse = TRUE)
 
   # Inside the search zone raster, only keep pixels with high conductivity
@@ -260,7 +261,7 @@ find_road_branches <- function(road, conductivity)
   # Recompute again patches to remove small clumps
   conductivity_search_zone_clump <- terra::patches(conductivity_search_zone_clump, directions = 8)
   tmp <- table(conductivity_search_zone_clump[])
-  valid_patches <- as.numeric(names(tmp[tmp > 20]))
+  valid_patches <- as.numeric(names(tmp[tmp > 20 & tmp < 500]))
   conductivity_search_zone_clump[!conductivity_search_zone_clump[] %in% valid_patches] <- NA
   # plot(conductivity_search_zone_clump, col = lidR::random.colors(25))
 
@@ -271,69 +272,69 @@ find_road_branches <- function(road, conductivity)
   pts_clump <- sf::st_as_sf(pts_clump)
   pts_clump <- dplyr::group_by(pts_clump, patches) |> dplyr::summarise(avg_conductivity = mean(conductivity))
   sf::st_agr(pts_clump) <- "constant"
-  # plot(pts_clump["avg_conductivity"], cex = 0.25, pch = 19)
+  # plot(conductivity, col = viridis::viridis(50))
+  # plot(pts_clump["avg_conductivity"], cex = 0.1, pch = 19, add = T)
 
   # linear model to get the orientation of the patches and remove non linear patches
-  slopes <- numeric(nrow(pts_clump))
-  intercepts <- numeric(nrow(pts_clump))
-  rsquare <- numeric(nrow(pts_clump))
+  r <- numeric(nrow(pts_clump))
   for (i in seq_along(pts_clump$geometry))
   {
+    #plot(pts_clump$geometry[i])
     xy <- sf::st_coordinates(pts_clump$geometry[i])[,-3]
-    xy <- as.data.frame(xy)
-    lm <- stats::lm(Y~X, data = xy)
-    co <- coefficients(lm)
-    rsquare[i] <- summary(lm)$r.squared
-    slopes[i] <- co[2]
-    intercepts[i] <- co[1]
+    mx <- cov(xy)
+    ei <- eigen(mx)
+    r[i] <- ei$values[1]/ei$values[2]
   }
-  keep <- which(rsquare > 0.5)
-  pts_clump <- pts_clump[keep,]
-  slopes <- slopes[keep]
-  intercepts <- intercepts[keep]
-  #plot(pts_clump["avg_conductivity"], cex = 0.25, pch = 19)
+  pts_clump$r = abs(r)
+  sf::st_agr(pts_clump) <- "constant"
+  #plot(conductivity, col = viridis::viridis(50))
+  #plot(pts_clump["r"], cex = 0.2, add = T, pal = viridis::inferno(20))
+  #plot(pts_clump["r"], cex = 0.2)
+  pts_clump <- pts_clump[pts_clump$r > 4,]
+  pts_clump <- pts_clump[pts_clump$avg_conductivity > 0.5,]
+  #plot(conductivity, col = viridis::viridis(50))
+  #plot(pts_clump["avg_conductivity"], cex = 0.25, pch = 19, add = T)
 
-  # Compute the centroid of each clump
-  pts_clump_centroid <- sf::st_centroid(pts_clump)
+  # Compute the centroid of each clump. This is the end for a LCP
+  ends <- sf::st_centroid(pts_clump) |> sf::st_geometry()
   #plot(conductivity,  col = viridis::viridis(50))
-  #plot(pts_clump_centroid["avg_conductivity"], cex = 1, pch = 19, pal = viridis::viridis, add = T)
+  #plot(st_geometry(ends), cex = 1, pch = 19, col = "red", add = T)
 
-  # compute the start of the road which is at the inersection between the segment of known
-  # slope/intercept and the road
-  xy <- sf::st_coordinates(pts_clump_centroid)
-  segments <- vector("list", nrow(xy))
-  for (i in 1:nrow(xy))
+  starts <- sf::st_nearest_points(ends, road) |> lwgeom::st_endpoint()
+  #plot(sf::st_geometry(start), cex = 1, pch = 19, col = "pink", add = T)
+
+  segments <- vector("list", length(stars))
+  for(i in seq_along(starts))
   {
-    centroid <- xy[i,]
-    xstart <- centroid[1] - 80
-    xend   <- centroid[1] + 80
-    ystart <- slopes[i] * xstart + intercepts[i]
-    yend <- slopes[i] * xend + intercepts[i]
-    m <- matrix(c(xstart, xend, ystart, yend), 2, 2)
-    segments[[i]] <- sf::st_sfc(sf::st_linestring(m))
+    bbox <- sf::st_bbox(c(starts[i], ends[i]))
+    bbox <- sf::st_as_sfc(bbox)
+    bbox <- sf::st_buffer(bbox, 10)
+    sigma <- raster::crop(conductivity, bbox)
+    #plot(sigma,  col = viridis::viridis(50))
+    #plot(st_geometry(starts[i]), cex = 1, pch = 19, col = "red", add = T)
+    #plot(st_geometry(ends[i]), cex = 1, pch = 19, col = "red", add = T)
+    trans <- MFFProads:::transition(raster::raster(sigma))
+    path  <- gdistance::shortestPath(trans, sf::as_Spatial(starts[i]), sf::as_Spatial(ends[i]), output = "SpatialLines") |> suppressWarnings()
+    cost  <- gdistance::costDistance(trans, sf::as_Spatial(starts[i]), sf::as_Spatial(ends[i]))
+    path  <- sf::st_as_sf(path)
+    path  <- sf::st_set_crs(path, sf::NA_crs_)
+    path  <- sf::st_set_crs(path, sf::st_crs(road))
+    path  <- sf::st_simplify(path, dTolerance = 2)
+    cost  <- as.numeric(cost/sf::st_length(path))
+    path$cost <- cost
+    #plot(path, add = T, col = "red")
+    segments[[i]] <- path
   }
-  segments <- do.call(c, segments)
-  segments <- sf::st_set_crs(segments, sf::st_crs(road))
+  segments <- do.call(rbind, segments)
+  segments <- segments[segments$cost < 1.5,]
+  #plot(conductivity,  col = viridis::viridis(50))
+  #plot(segments["cost"], add = T,lwd = 3)
+
+  segments <- sf::st_difference(segments, sf::st_buffer(road, 5))
+  #plot(conductivity,  col = viridis::viridis(50))
   #plot(segments, add = T, col = "red",lwd = 3)
 
-  ex_road <- st_extend_line(road, 100)   # extent the line to get intersection at the end
-  starting_roads_pot <- sf::st_intersection(ex_road, segments)
-  starting_roads_pot <- sf::st_cast(starting_roads_pot, "POINT")
-  # plot(conductivity,  col = viridis::viridis(50))
-  # plot(starting_roads_pot, col = "red", pch = 19, cex = 1, add = TRUE)
-
-  init_segments <- vector("list", length(starting_roads_pot))
-  for (i in 1:length(starting_roads_pot))
-  {
-    a <- starting_roads_pot[i]
-    b <- sf::st_geometry(pts_clump_centroid)[i]
-    init_segments[[i]] <- sf::st_cast(sf::st_union(a,b),"LINESTRING")
-  }
-  init_segments <- do.call(c, init_segments)
-  # plot(conductivity,  col = viridis::viridis(50))
-  # plot(init_segments, col = "red", add = TRUE, lwd = 3)
-
-  return(init_segments)
+  return(sf::st_geometry(segments))
 }
 
 
