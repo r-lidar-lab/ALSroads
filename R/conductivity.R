@@ -13,7 +13,7 @@
 #' library(lidR)
 #' library(raster)
 #' dir  <- system.file("extdata", "", package="MFFProads")
-#' dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
 #' ctg  <- readLAScatalog(dir)
 #' dtm  <- raster(dtm)
 #' las  <- readLAS(ctg$filename[1])

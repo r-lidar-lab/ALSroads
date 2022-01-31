@@ -116,6 +116,9 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
         sf::st_set_crs(sf::st_crs(starting_road))
 
       sub_aoi_conductivity <- query_conductivity_aoi(conductivity, new_aoi_poly)
+      #plot(conductivity, col = viridis::viridis(50))
+      #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
+      #plot(starting_road, add = T, lwd = 3, col = "red")
 
       # Check again if some ends fall outside of the newly cropped conductivity raster
       val <- raster::extract(sub_aoi_conductivity, M)
@@ -130,24 +133,27 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
     }
 
     # Find cost of each edge point
-    cost <- as.numeric(gdistance::costDistance(trans, sf::as_Spatial(start), sf::as_Spatial(ends))) |> suppressWarnings()
-    cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
-    cost2 <- ma(cost * penalty)
-    ends$cost <- cost2
-    #plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
-    #plot(ends, pal = viridis::viridis, pch = 19, add = T)
-    #plot(p1, col = "red", pch = 19, add = T)
-    #plot(p2, col = "red", pch = 19, add = T)
+    if (!is.infinite(cost_max))
+    {
+      cost <- gdistance::costDistance(trans, sf::as_Spatial(start), sf::as_Spatial(ends)) |> suppressWarnings()
+      cost <- as.numeric(cost)
+      cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
+      cost2 <- ma(cost * penalty)
+      ends$cost <- cost2
+      #plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
+      #plot(ends, pal = viridis::viridis, pch = 19, add = T)
+      #plot(p1, col = "red", pch = 19, add = T)
+      #plot(p2, col = "red", pch = 19, add = T)
 
-    # Select point coordinates with the lowest
-    # penalty adjusted cost
-    idx_min <- which.min(cost2)
-    current_cost <- cost[idx_min]
-    W <- M[idx_min,] |> as.matrix() |> sf::st_point()
+      # Select point coordinates with the lowest
+      # penalty adjusted cost
+      idx_min <- which.min(cost2)
+      current_cost <- cost[idx_min]
+      W <- M[idx_min,] |> as.matrix() |> sf::st_point()
 
-    # Save the least-cost pixel coordinates
-    k <- k + 1
-    list_coords[[k]] <- W
+      k <- k + 1
+      list_coords[[k]] <- W
+    }
   }
 
   newline <- sf::st_sfc(list_coords) |>
@@ -168,7 +174,8 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   speed = round(dist/hdt)
   cat("Processed ended in", dt, units::deparse_unit(dt),
       ": road of", dist, units::deparse_unit(dist),
-      "driven at", speed, units::deparse_unit(speed))
+      "driven at", speed, units::deparse_unit(speed),
+      "\n")
 
   return(newline)
 }
@@ -396,3 +403,35 @@ query_conductivity_aoi <- function(conductivity, starting_road)
 
   return(conductivity_crop)
 }
+
+#' Full workflow example
+#'
+#' An example of full workflow
+#'
+#' @examples
+#' library(terra)
+#' library(raster)
+#' library(sf)
+#'
+#' conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "MFFProads")
+#' starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "MFFProads")#'
+#' conductivity <- raster(conductivity)
+#' starting <- st_read(starting, "starting_road", quiet = TRUE)
+#'
+#' road <- drive_road(starting, conductivity)
+#'
+#' plot(conductivity, col = viridis::viridis(50), legend = FALSE)
+#' plot(starting, add = TRUE, col = "green", lwd = 3)
+#' plot(road, add = TRUE, col = "red", lwd = 2)
+#'
+#' road_branches <- find_road_branches(road, conductivity)
+#'
+#' plot(road_branches, col = "lightblue", add = TRUE, lwd = 3)
+#'
+#' new_roads <- vector("list", length(road_branches))
+#' for (i in seq_along(road_branches))
+#'   new_roads[[i]] <- drive_road(road_branches[i], conductivity)
+#'
+#' new_roads <- do.call(c, new_roads)
+#' plot(new_roads, add = TRUE, col = "red", lwd = 2)
+NULL
