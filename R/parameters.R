@@ -24,7 +24,7 @@ terrain = list(
 
 conductivity = list(
   s = c(5, 20),
-  r = c(0.2, 0.3),
+  r = c(0.2, 0.4),
   e = c(15, 40),
   q = c(0.1, 0.25, 0.5),
   h = c(0.5, 1),
