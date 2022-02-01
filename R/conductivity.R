@@ -105,6 +105,18 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   {
     q <- param$conductivity$q
 
+    # Normalize intensity o different flightlins
+    if (data.table::uniqueN(nlas$PointSourceID) > 1)
+    {
+      u <- nlas@data[, list(N = .N, Imean = median(Intensity)), by = PointSourceID]
+      i <- which.max(u$N)
+      Iref = u$Imean[i]
+      u$f = u$Imean/Iref
+      idx <- match(nlas$PointSourceID, u$PointSourceID)
+      Icorr = nlas$Intensity/u$f[idx]
+      nlas$Intensity <- as.integer(Icorr)
+    }
+
     # Detect outliers of intensity and change their value. This is not perfect but avoid many troubles
     Intensity <- NULL
     outliers <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
