@@ -13,7 +13,7 @@
 #' library(lidR)
 #' library(raster)
 #' dir  <- system.file("extdata", "", package="MFFProads")
-#' dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
 #' ctg  <- readLAScatalog(dir)
 #' dtm  <- raster(dtm)
 #' las  <- readLAS(ctg$filename[1])
@@ -62,6 +62,8 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
     stop("dtm must be a RasterLayer or must be NULL")
   }
 
+  # plot(dtm, col = gray(1:30/30))
+
   # Force to use raster
   if (lidR:::raster_pkg(dtm) == "terra")
     dtm <- raster::raster(dtm)
@@ -72,6 +74,8 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   terrain   <- terra::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
   slope     <- terrain$slope
   roughness <- terrain$roughness
+  #plot(slope, col = gray(1:30/30))
+  #plot(roughness, col = gray(1:30/30))
 
   # Slope-based conductivity
   s <- param$conductivity$s
@@ -84,9 +88,9 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   # Roughness-based conductivity
   r <- param$conductivity$r
   sigma_r   <- dtm
-  sigma_r[] <- activation(roughness[], r, "thresholds", asc = FALSE)
+  sigma_r[] <- activation(roughness[], r, "piecewise-linear", asc = FALSE)
 
-  if (display) raster::plot(sigma_r, col = viridis::viridis(3), main = "Conductivity roughness")
+  if (display) raster::plot(sigma_r, col = viridis::viridis(25), main = "Conductivity roughness")
   verbose("   - Roughness conductivity map\n")
 
   # Edge-based conductivity
@@ -95,7 +99,8 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   sobl <- sobel(slop)
   sigma_e <- dtm
   sigma_e[] <- sobl
-  sigma_e[] <- activation(sigma_e[], e, "thresholds", asc = FALSE)
+  #plot(sigma_e, col = gray(1:30/30))
+  sigma_e[] <- activation(sigma_e[], e[2], "thresholds", asc = FALSE)
 
   if (display) raster::plot(sigma_e, col = viridis::viridis(3), main = "Conductivity Sobel edges")
   verbose("   - Sobel conductivity map\n")
@@ -108,7 +113,10 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
     # Normalize intensity o different flightlins
     if (data.table::uniqueN(nlas$PointSourceID) > 1)
     {
-      u <- nlas@data[, list(N = .N, Imean = median(Intensity)), by = PointSourceID]
+      u <- nlas@data[, list(N = .N, Imin = min(Intensity), Imean = as.numeric(median(Intensity)), Isd = fsd(Intensity)), by = PointSourceID]
+      data = nlas@data[, c("PointSourceID", "Intensity")]
+      data[, nIntensity := (Intensity - mean(Intensity))/sd(Intensity), by = PointSourceID]
+
       i <- which.max(u$N)
       Iref = u$Imean[i]
       u$f = u$Imean/Iref
@@ -119,7 +127,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
 
     # Detect outliers of intensity and change their value. This is not perfect but avoid many troubles
     Intensity <- NULL
-    outliers <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
+    outliers <- as.integer(stats::quantile(nlas$Intensity, probs = 0.98))
     nlas@data[Intensity > 2L*outliers, Intensity := 2L*outliers]
 
     # Switch Z and Intensity trick to use fast lidR internal function
@@ -130,13 +138,13 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
     irange <- imax - imin
     nlas@data[["Z"]] <- Z
 
-    if (display) raster::plot(irange, col = viridis::inferno(10), main = "Intensity range")
+    if (display) raster::plot(irange, col = heat.colors(20), main = "Intensity range")
 
     th <- stats::quantile(irange[], probs = q, na.rm = TRUE)
     sigma_i <- dtm
-    sigma_i[] <- activation(irange[], th, "thresholds", asc = FALSE)
+    sigma_i[] <- activation(irange[], th[c(1,3)], "piecewise-linear", asc = FALSE)
 
-    if (display) raster::plot(sigma_i, col = viridis::viridis(3), main = "Conductivity intensity")
+    if (display) raster::plot(sigma_i, col = viridis::viridis(20), main = "Conductivity intensity")
     verbose("   - Intensity conductivity map\n")
   }
   else
@@ -149,23 +157,25 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   h <- param$conductivity$h
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
   sigma_chm <- dtm
-  sigma_chm[] <- activation(chm[], h, "thresholds", asc = FALSE)
+  sigma_chm[] <- activation(chm[], h, "piecewise-linear", asc = FALSE)
 
-  if (display) raster::plot(sigma_chm, col = viridis::inferno(3), main = "Conductivity CHM")
+  if (display) raster::plot(sigma_chm, col = viridis::inferno(25), main = "Conductivity CHM")
   verbose("   - CHM conductivity map\n")
 
   # Lowpoints-based conductivity
   # Check the presence/absence of lowpoints
-  z1 <- 1
+  z1 <- 0.5
   z2 <- 3
-  th <- 1
+  th <- 2
 
   tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
-  lp  <- lidR::grid_density(tmp, dtm)*(raster::res(dtm)[1]^2)
+  lp  <- lidR:::rasterize_fast(tmp, dtm, 0, "count", pkg = "raster")
+  lp[is.na(lp)] <- 0
   sigma_lp <- dtm
   sigma_lp[] <- activation(lp[], th, "thresholds", asc = FALSE)
 
-  if (display) raster::plot(sigma_lp, col = viridis::inferno(3), main = "Bottom layer")
+  if (display) raster::plot(lp, col = viridis::inferno(20), main = "Number of low point")
+  if (display) raster::plot(sigma_lp, col = viridis::inferno(2), main = "Bottom layer")
   verbose("   - Bottom layer conductivity map\n")
 
   # Density-based conductivity
@@ -178,18 +188,20 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   M[2,2] <- 2
   d <- raster::focal(d, M, mean, padValue = NA, na.rm = T, pad = T)
 
+  if (display) raster::plot(d, col = viridis::inferno(10), main = "Density of ground points")
+
   val <- d[]
   val <- val[val > 0]
   th  <- stats::quantile(val, probs = q)
   sigma_d <- dtm
-  sigma_d[] <- activation(d[], th, "thresholds")
+  sigma_d[] <- activation(d[], th[c(1,3)], "piecewise-linear")
 
-  if (display)  raster::plot(sigma_d, col = viridis::inferno(3), main = "Conductivity density")
+  if (display)  raster::plot(sigma_d, col = viridis::inferno(25), main = "Conductivity density")
   verbose("   - Density conductivity map\n")
 
   # Final conductivity sigma
-  max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1 + as.numeric(use_intensity))
-  sigma <- sigma_s *sigma_lp * sigma_e * (2 * sigma_d + sigma_chm + sigma_r + sigma_i)
+  max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1  + as.numeric(use_intensity))
+  sigma <- sigma_s * sigma_lp * sigma_e * (2 * sigma_d + sigma_chm + sigma_r + sigma_i)
   sigma <- sigma/max_coductivity
 
   if (display) raster::plot(sigma, col = viridis::inferno(15), main = "Conductivity 1m")
@@ -208,6 +220,8 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
 
   if (!no_aggregate)
     out <- raster::aggregate(out, fact = 2, fun = mean, na.rm = TRUE)
+
+  if (display) raster::plot(out, col = viridis::inferno(15), main = "Conductivity 2m")
 
   if (pkg == "terra")
     out <- terra::rast(out)
