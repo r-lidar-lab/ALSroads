@@ -63,5 +63,5 @@ activation <- function(x, th, mode = c("thresholds", "piecewise-linear"), asc = 
     y[x >= th[length(th)]] <- 1-start
   }
 
-  return(y)
+  return(round(y,3))
 }

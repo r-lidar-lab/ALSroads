@@ -43,14 +43,14 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
   if (is.null(conductivity))
   {
     verbose("Computing conductivity maps...\n")
-    conductivity <- rasterize_conductivity(las, dtm, param, return_all = FALSE, return_stack = FALSE)
+    conductivity <- rasterize_conductivity(las, dtm = dtm, param = param, return_all = FALSE, return_stack = FALSE)
   }
 
   # Handle bridge case:
   # If a road crosses a water body it builds a bridge, i.e. a polygon in which we will
   # force a conductivity of 1 later
   bridge = NULL
-  if (!is.null(water) && length(water) > 0)
+  if (!is.null(water) && length(sf::st_geometry(water)) > 0)
   {
     id <- NULL
     water <- sf::st_geometry(water)
@@ -59,7 +59,7 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
     water <- sf::st_crop(water, bbox)
     bridge <- sf::st_intersection(sf::st_geometry(centerline), water)
     if (length(bridge) > 0) bridge <- sf::st_buffer(bridge, 5)
-    conductivity <- raster::mask(conductivity, sf::as_Spatial(water), inverse = TRUE)
+    if (length(water)  > 0) conductivity <- raster::mask(conductivity, sf::as_Spatial(water), inverse = TRUE)
   }
 
   if (length(bridge) > 0)
