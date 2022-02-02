@@ -301,7 +301,7 @@ find_road_branches <- function(road, conductivity)
   #plot(st_geometry(ends), cex = 1, pch = 19, col = "red", add = T)
 
   starts <- sf::st_nearest_points(ends, road) |> lwgeom::st_endpoint()
-  #plot(sf::st_geometry(start), cex = 1, pch = 19, col = "pink", add = T)
+  #plot(sf::st_geometry(starts), cex = 1, pch = 19, col = "pink", add = T)
 
   segments <- vector("list", length(stars))
   for(i in seq_along(starts))
