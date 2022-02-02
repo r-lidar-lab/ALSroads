@@ -178,6 +178,8 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
     verbose("Done\n") ; cat("\n")
 
     # We exit the function. The next code being the regular case we no splitting
+    new_road <- rename_sf_colum(new_road, centerline)
+
     return(new_road)
   }
 
@@ -283,7 +285,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   }
 
   verbose("Done\n") ; cat("\n")
-
+  new_road <- rename_sf_column(new_road, centerline)
   return(new_road)
 }
 
@@ -336,6 +338,8 @@ road_class0 <- function(centerline)
   names <- append(names, ngeom)
   data.table::setcolorder(new_road, names)
 
+  new_road <- rename_sf_column(new_road, centerline)
+
   return(new_road)
 }
 
@@ -358,6 +362,8 @@ road_class4 <- function(centerline)
   names <- append(names, ngeom)
   data.table::setcolorder(new_road, names)
 
+  new_road <- rename_sf_column(new_road, centerline)
+
   return(new_road)
 }
 
@@ -371,5 +377,15 @@ warn_weird_road <- function(centerline)
     else
       warning("Sharp turn (< 90 degrees) between two consecutive segments of the input road. This is weird and may lead to invalid outputs.", call. = FALSE)
   }
+}
+
+rename_sf_column <- function(x,as)
+{
+  # Ensure the sf_colum is the same than the input
+  current <- attr(x, "sf_column")
+  name    <- attr(as, "sf_column")
+  names(x)[names(x) == current] = name
+  sf::st_geometry(x) = name
+  x
 }
 
