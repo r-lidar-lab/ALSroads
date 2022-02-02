@@ -100,7 +100,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   sigma_e <- dtm
   sigma_e[] <- sobl
   #plot(sigma_e, col = gray(1:30/30))
-  sigma_e[] <- activation(sigma_e[], e[2], "thresholds", asc = FALSE)
+  sigma_e[] <- activation(sigma_e[], e, "thresholds", asc = FALSE)
 
   if (display) raster::plot(sigma_e, col = viridis::viridis(3), main = "Conductivity Sobel edges")
   verbose("   - Sobel conductivity map\n")
@@ -142,7 +142,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
 
     th <- stats::quantile(irange[], probs = q, na.rm = TRUE)
     sigma_i <- dtm
-    sigma_i[] <- activation(irange[], th[c(1,3)], "piecewise-linear", asc = FALSE)
+    sigma_i[] <- activation(irange[], th, "piecewise-linear", asc = FALSE)
 
     if (display) raster::plot(sigma_i, col = viridis::viridis(20), main = "Conductivity intensity")
     verbose("   - Intensity conductivity map\n")
@@ -194,7 +194,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   val <- val[val > 0]
   th  <- stats::quantile(val, probs = q)
   sigma_d <- dtm
-  sigma_d[] <- activation(d[], th[c(1,3)], "piecewise-linear")
+  sigma_d[] <- activation(d[], th, "piecewise-linear")
 
   if (display)  raster::plot(sigma_d, col = viridis::inferno(25), main = "Conductivity density")
   verbose("   - Density conductivity map\n")
