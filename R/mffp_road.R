@@ -178,7 +178,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
     verbose("Done\n") ; cat("\n")
 
     # We exit the function. The next code being the regular case we no splitting
-    new_road <- rename_sf_colum(new_road, centerline)
+    new_road <- rename_sf_column(new_road, centerline)
 
     return(new_road)
   }
