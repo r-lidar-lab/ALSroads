@@ -28,7 +28,8 @@ conductivity = list(
   e = 40,
   q = c(0.1, 0.5),
   h = c(0.1, 0.2),
-  d = c(0.25, 0.95)
+  d = c(0.25, 0.95),
+  alpha = list(h = 1, d = 2, r = 1, i = 1)
 )
 
 # Parameters to evaluate the state of a section

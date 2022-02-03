@@ -19,7 +19,7 @@
 #' las  <- readLAS(ctg$filename[1])
 #'
 #' sigma <- rasterize_conductivity(las, dtm = dtm)
-#' plot(sigma, col = viridis::viridis(30))
+#' plot(sigma, col = viridis::inferno(30))
 #'
 #' \donttest{
 #' sigma <- rasterize_conductivity(ctg, dtm = dtm)
@@ -156,10 +156,10 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   # CHM-based conductivity
   h <- param$conductivity$h
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
-  sigma_chm <- dtm
-  sigma_chm[] <- activation(chm[], h, "piecewise-linear", asc = FALSE)
+  sigma_h <- dtm
+  sigma_h[] <- activation(chm[], h, "piecewise-linear", asc = FALSE)
 
-  if (display) raster::plot(sigma_chm, col = viridis::inferno(25), main = "Conductivity CHM")
+  if (display) raster::plot(sigma_h, col = viridis::inferno(25), main = "Conductivity CHM")
   verbose("   - CHM conductivity map\n")
 
   # Lowpoints-based conductivity
@@ -200,11 +200,13 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   verbose("   - Density conductivity map\n")
 
   # Final conductivity sigma
-  max_coductivity <- 1 * 1 * 1 * (2 * 1 + 1 + 1  + as.numeric(use_intensity))
-  sigma <- sigma_s * sigma_lp * sigma_e * (2 * sigma_d + sigma_chm + sigma_r + sigma_i)
+  alpha = param$conductivity$alpha
+  alpha$i = alpha$i * as.numeric(use_intensity)
+  max_coductivity <- sum(unlist(alpha))
+  sigma <- sigma_s * sigma_lp * sigma_e * (alpha$d * sigma_d + alpha$h * sigma_h + alpha$r * sigma_r + alpha$i * sigma_i)
   sigma <- sigma/max_coductivity
 
-  if (display) raster::plot(sigma, col = viridis::inferno(15), main = "Conductivity 1m")
+  if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Conductivity 1m")
   verbose("   - Global conductivity map\n")
 
   # The output is sigma but we can also return everything to illustrate the paper
@@ -214,7 +216,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
   } else if (!return_all & !return_stack) {
     out <- sigma
   } else {
-    out <- raster::stack(slope, roughness, sigma_s, sigma_r, sigma_e, chm, sigma_chm, d, sigma_d, irange, sigma_i, sigma_lp, sigma)
+    out <- raster::stack(slope, roughness, sigma_s, sigma_r, sigma_e, chm, sigma_h, d, sigma_d, irange, sigma_i, sigma_lp, sigma)
     names(out) <- c("slope", "roughness", "conductivity_slope", "conductivity_roughness", "conductivity_edge", "chm", "conductivity_chm", "density", "conductivity_density", "intensity", "conductivity_intensity", "conductivity_bottom", "conductivity")
   }
 
