@@ -103,6 +103,13 @@ mask_conductivity <- function(conductivity, centerline, param)
 
   # Boundary masking
   hull <- sf::st_buffer(centerline, param$extraction$road_buffer)
+
+  # Fix an issue for road at the very edge of a catalog
+  bb_hull <- sf::st_bbox(hull)
+  bb_cond <- sf::st_bbox(conductivity)
+  if (bb_hull[1] < bb_cond[1] | bb_hull[2] < bb_cond[2] | bb_hull[3] > bb_cond[3] | bb_hull[4] > bb_cond[4])
+    conductivity = raster::extend(conductivity, bb_hull)
+
   conductivity <- raster::mask(conductivity, hull)
 
   if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
