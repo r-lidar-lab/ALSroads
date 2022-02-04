@@ -261,8 +261,8 @@ make_caps <- function(centerline, param)
   cap_A <- sf::st_buffer(A, buf)
   cap_B <- sf::st_buffer(B, buf)
 
-  shield_A <- sf::st_buffer(A, buf - 4)
-  shield_B <- sf::st_buffer(B, buf - 4)
+  shield_A <- sf::st_buffer(A, buf - 5)
+  shield_B <- sf::st_buffer(B, buf - 5)
   shield <- sf::st_union(shield_A, shield_B)
 
   caps_A <- sf::st_difference(cap_A, poly1)
