@@ -34,7 +34,8 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   t0 <- Sys.time()
 
   # Threshold of cost to stop the search.
-  cost_max <- sightline * 6
+  min_conductivity <- 0.4
+  cost_max <- sightline * 1/min_conductivity
 
   # Constant definition
   buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
@@ -54,7 +55,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 
   sub_aoi_conductivity <- query_conductivity_aoi(conductivity, starting_road)
   resolution <- raster::res(sub_aoi_conductivity)[1]
-  #plot(conductivity, col = viridis::viridis(50))
+  #plot(conductivity, col = viridis::inferno(50))
   #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
   #plot(starting_road, add = T, lwd = 3, col = "red")
 
@@ -65,7 +66,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   angles_rad <- angles * pi / 180
 
   # Set penalty coefficient for each view angle
-  penalty_at_45_degrees <- 1.5  # Could be set as a parameter
+  penalty_at_45_degrees <- 1.25 # Could be set as a parameter
   penalty <- abs(angles) / fov
   penalty <- penalty * (penalty_at_45_degrees - 1) + 1
 
@@ -73,9 +74,9 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   current_cost <- 0
   k <- 2
   cat("Driving the conductivity raster\n")
-  while (current_cost <= cost_max)
+  while (current_cost <= cost_max & k < 40)
   {
-    if (k %% 2 == 0) cat("", (k-1)*10, " m\r", sep = "")
+    if (k %% 2 == 0) cat("", (k-1)*sightline, " m\r", sep = "")
     flush.console()
 
     # Compute heading from the two previous points
@@ -98,7 +99,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
     #plot(ends, pch = 19, add = T, col = "red")
 
     # Compute the transition matrix for this AOI
-    trans <- transition(aoi)
+    trans <- transition(aoi, geocorrection = TRUE)
 
     # Check if some ends fall outside of the AOI conductivity raster
     # If any reload another raster part further ahead.
@@ -116,7 +117,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
         sf::st_set_crs(sf::st_crs(starting_road))
 
       sub_aoi_conductivity <- query_conductivity_aoi(conductivity, new_aoi_poly)
-      #plot(conductivity, col = viridis::viridis(50))
+      #plot(conductivity, col = viridis::inferno(50))
       #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
       #plot(starting_road, add = T, lwd = 3, col = "red")
 
@@ -129,7 +130,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 
       # Re-extract the AOI and recompute the transition
       aoi <- raster::crop(sub_aoi_conductivity, search_zone)
-      trans <- transition(aoi)
+      trans <- transition(aoi, geocorrection = TRUE)
     }
 
     # Find cost of each edge point
@@ -138,18 +139,25 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
       cost <- gdistance::costDistance(trans, sf::as_Spatial(start), sf::as_Spatial(ends)) |> suppressWarnings()
       cost <- as.numeric(cost)
       cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
-      cost2 <- ma(cost * penalty)
+      cost2 <- ma(cost * penalty, n = 5)
       ends$cost <- cost2
+
+      #paths = gdistance::shortestPath(trans, sf::as_Spatial(start), sf::as_Spatial(ends), output = "SpatialLines") |> suppressWarnings()
       #plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
-      #plot(ends, pal = viridis::viridis, pch = 19, add = T)
+      #plot(ends, pal = viridis::viridis, pch = 19, add = T, breaks = "quantile")
       #plot(p1, col = "red", pch = 19, add = T)
       #plot(p2, col = "red", pch = 19, add = T)
+      #plot(paths, add = T, col = "red")
+      #plot(angles, log(cost), type = "b")
+      #points(angles, log(cost2), col = "blue", type = "b")
 
       # Select point coordinates with the lowest
       # penalty adjusted cost
       idx_min <- which.min(cost2)
       current_cost <- cost[idx_min]
       W <- M[idx_min,] |> as.matrix() |> sf::st_point()
+
+      plot(sf::st_sfc(W), add = T, col = "red", pch = 19)
 
       k <- k + 1
       list_coords[[k]] <- W

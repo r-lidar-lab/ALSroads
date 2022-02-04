@@ -169,15 +169,18 @@ start_end_points = function(centerline, param)
   return(list(A = A, B = B))
 }
 
-transition <- function(conductivity)
+transition <- function(conductivity, geocorrection = TRUE)
 {
   verbose("Computing graph map...\n")
 
   trans <- gdistance::transition(conductivity, transitionFunction = mean, directions = 8)
   verbose("   - Transition graph\n")
 
-  trans <- gdistance::geoCorrection(trans)
-  verbose("   - Geocorrection graph\n")
+  if (isTRUE(geocorrection))
+  {
+    trans <- gdistance::geoCorrection(trans)
+    verbose("   - Geocorrection graph\n")
+  }
 
   return(trans)
 }
