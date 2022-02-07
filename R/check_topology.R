@@ -14,7 +14,7 @@
 #' @examples
 #' library(sf)
 #'
-#' network   <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+#' network   <- system.file("extdata", "road_network.gpkg", package="ALSroads")
 #' network   <- st_read(network, "invalid_topology")
 #' junctions <- st_check_junctions(network)
 #'
@@ -106,7 +106,7 @@ st_check_junctions = function(roads, tolerance = 8)
 #' @examples
 #' library(sf)
 #'
-#' network <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+#' network <- system.file("extdata", "road_network.gpkg", package="ALSroads")
 #' network <- st_read(network, "invalid_topology")
 #'
 #' crossings <- st_check_crossings(network)

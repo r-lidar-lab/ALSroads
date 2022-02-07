@@ -73,7 +73,7 @@ road_measure = function(las, road, param)
     },
     error = function(e)
     {
-      if (isTRUE(getOption("MFFProads.debug")))
+      if (isTRUE(getOption("ALSroads.debug")))
       {
         f <- tempfile(fileext = ".las")
         lidR::writeLAS(las_slice, f)
@@ -100,7 +100,7 @@ road_measure = function(las, road, param)
     },
     error = function(e)
     {
-      if (isTRUE(getOption("MFFProads.debug")))
+      if (isTRUE(getOption("ALSroads.debug")))
       {
         f <- tempfile(fileext = ".las")
         nlas_slice <- lidR::add_lasattribute(nlas_slice, name = "Zref", desc = "Absolute Elvation")
@@ -114,7 +114,7 @@ road_measure = function(las, road, param)
     },
     warning = function(e)
     {
-      if (isTRUE(getOption("MFFProads.debug")))
+      if (isTRUE(getOption("ALSroads.debug")))
       {
         f <- tempfile(fileext = ".las")
         nlas_slice <- lidR::add_lasattribute(nlas_slice, name = "Zref", desc = "Absolute Elvation")
@@ -187,7 +187,7 @@ road_metrics =  function(road, segment_metrics)
     SINUOSITY = S,
     CONDUCTIVITY = road$CONDUCTIVITY)
 
-  if (getOption("MFFProads.debug.metrics")) plot_road_metrics(road, road_metrics, segment_metrics)
+  if (getOption("ALSroads.debug.metrics")) plot_road_metrics(road, road_metrics, segment_metrics)
 
   return(road_metrics)
 }

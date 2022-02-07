@@ -23,7 +23,7 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
   #graphics::lines(dd$Xr, dd$avgZ, col = "blue")
   #graphics::lines(dd2$Xr, dd2$pabove05*2, col = "darkgreen")
 
-  if (!isFALSE(getOption("MFFProads.debug.measuring.size")))
+  if (!isFALSE(getOption("ALSroads.debug.measuring.size")))
   {
     zaccotementstart = -3
     zaccotementend = 13
@@ -69,7 +69,7 @@ plot_road_width = function(road_norm_segment, nlas_segment, m, profiles_gnd, pro
                      lwd = c(1,1,1,1,1))
   }
 
-  if (!isFALSE(getOption("MFFProads.debug.measuring.pos")))
+  if (!isFALSE(getOption("ALSroads.debug.measuring.pos")))
   {
     D <- dd2[Xr >= -7 & Xr <= + 7]
     sdZ = ma(D$sdZ, 12)

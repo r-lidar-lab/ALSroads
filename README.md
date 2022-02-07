@@ -1,11 +1,11 @@
-# MFFProads
+# ALSroads
 
-MFFProads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs du Québec (MFFP)](https://mffp.gouv.qc.ca/)
+ALSroads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs du Québec (MFFP)](https://mffp.gouv.qc.ca/)
 
 ## Installation
 
 ``` r
-remotes::install_github("Jean-Romain/MFFProads")
+remotes::install_github("Jean-Romain/ALSroads")
 ```
 
 ## Example
@@ -13,7 +13,7 @@ remotes::install_github("Jean-Romain/MFFProads")
 In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its class nor its width. The algorithm recomputes the accurate location of the road for a lidar point cloud and estimates its width and its state. Here we have an class 1 road with a width of 8 meters.
 
 ```r
-library(MFFProads)
+library(ALSroads)
 library(lidR)
 library(sf)
 library(raster)
@@ -21,9 +21,9 @@ library(mapview)
 library(leaflet)
 
 # Load data (LAS tiles, DTM, map)
-dir  <- system.file("extdata", "", package="MFFProads")
-road <- system.file("extdata", "road_971487.gpkg", package="MFFProads")
-dtm  <- system.file("extdata", "dtm_1m.tif", package="MFFProads")
+dir  <- system.file("extdata", "", package="ALSroads")
+road <- system.file("extdata", "road_971487.gpkg", package="ALSroads")
+dtm  <- system.file("extdata", "dtm_1m.tif", package="ALSroads")
 ctg  <- readLAScatalog(dir)
 road <- st_read(road, quiet = TRUE)
 dtm  <- raster(dtm)

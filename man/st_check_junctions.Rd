@@ -24,7 +24,7 @@ with the same \code{tolerance} value and the same road network.
 \examples{
 library(sf)
 
-network   <- system.file("extdata", "road_network.gpkg", package="MFFProads")
+network   <- system.file("extdata", "road_network.gpkg", package="ALSroads")
 network   <- st_read(network, "invalid_topology")
 junctions <- st_check_junctions(network)
 
