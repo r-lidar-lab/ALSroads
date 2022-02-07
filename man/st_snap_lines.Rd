@@ -27,7 +27,7 @@ network. If argument 'ref' is missing the method is very basic. The methods usin
 is more advanced.
 }
 \examples{
-f <- system.file("extdata", "j53e_network.gpkg", package="MFFProads")
+f <- system.file("extdata", "j53e_network.gpkg", package="ALSroads")
 
 ref <- sf::st_read(f, layer = "original")  # input of measure_roads
 cor <- sf::st_read(f, layer = "corrected") # output of measure_roads

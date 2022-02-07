@@ -31,14 +31,14 @@ Compute the conductivity raster sigma from lidar data according to Roussel et al
 \examples{
 library(lidR)
 library(raster)
-dir  <- system.file("extdata", "", package="MFFProads")
-dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
+dir  <- system.file("extdata", "", package="ALSroads")
+dtm  <- system.file("extdata", "j5gr_dtm.tif", package="ALSroads")
 ctg  <- readLAScatalog(dir)
 dtm  <- raster(dtm)
 las  <- readLAS(ctg$filename[1])
 
 sigma <- rasterize_conductivity(las, dtm = dtm)
-plot(sigma, col = viridis::viridis(30))
+plot(sigma, col = viridis::inferno(30))
 
 \donttest{
 sigma <- rasterize_conductivity(ctg, dtm = dtm)

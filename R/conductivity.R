@@ -12,8 +12,8 @@
 #' @examples
 #' library(lidR)
 #' library(raster)
-#' dir  <- system.file("extdata", "", package="MFFProads")
-#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
+#' dir  <- system.file("extdata", "", package="ALSroads")
+#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="ALSroads")
 #' ctg  <- readLAScatalog(dir)
 #' dtm  <- raster(dtm)
 #' las  <- readLAS(ctg$filename[1])
@@ -36,7 +36,7 @@ rasterize_conductivity <- function(las, dtm = NULL, param = mffproads_default_pa
 rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_default_parameters, ...)
 {
   use_intensity <- "Intensity" %in% names(las)
-  display <- getOption("MFFProads.debug.finding")
+  display <- getOption("ALSroads.debug.finding")
   dots <- list(...)
   return_all <- isTRUE(dots$return_all)
   return_stack <- isTRUE(dots$return_stack)

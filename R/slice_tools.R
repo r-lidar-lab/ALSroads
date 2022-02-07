@@ -131,7 +131,7 @@ slice_metrics = function(nlas_slice, param)
     number_accotements = shoulders$left$embankment + shoulders$right$embankment,
     xc = xc)
 
-  if (getOption("MFFProads.debug.measuring")) plot_road_width(road_norm_slice, nlas_slice, m, gnd_profiles, veg_profiles)
+  if (getOption("ALSroads.debug.measuring")) plot_road_width(road_norm_slice, nlas_slice, m, gnd_profiles, veg_profiles)
 
   return(m[-c(1:5)])
 }

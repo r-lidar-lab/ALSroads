@@ -12,7 +12,7 @@
 #' @noRd
 least_cost_path = function(las, centerline, dtm, conductivity, water, param)
 {
-  display <- getOption("MFFProads.debug.finding")
+  display <- getOption("ALSroads.debug.finding")
 
   if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
   if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
@@ -112,7 +112,7 @@ mask_conductivity <- function(conductivity, centerline, param)
 
   conductivity <- raster::mask(conductivity, hull)
 
-  if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
+  if (getOption("ALSroads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity 2m")
   verbose("   - Masking\n")
 
   # Penalty factor based on distance-to-road.
@@ -128,7 +128,7 @@ mask_conductivity <- function(conductivity, centerline, param)
   f <- (1-(((f - fmin) * (1 - target_min)) / (fmax - fmin)))
   conductivity <- f*conductivity
 
-  if (getOption("MFFProads.debug.finding")) raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
+  if (getOption("ALSroads.debug.finding")) raster::plot(f, col = viridis::viridis(25), main = "Distance factor")
   verbose("   - Road rasterization and distance factor map\n")
 
   # Set a conductivity of 1 in the caps and 0 on the outer half ring link in figure 6
@@ -147,7 +147,7 @@ mask_conductivity <- function(conductivity, centerline, param)
   res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
   conductivity[res] <- 0
 
-  if (getOption("MFFProads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
+  if (getOption("ALSroads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
   verbose("   - Add full conductivity end blocks\n")
 
   return(conductivity)
@@ -207,7 +207,7 @@ find_path = function(trans, centerline, A, B, param)
   path <- sf::st_difference(path, caps)
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
 
-  if (getOption("MFFProads.debug.finding")) plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
+  if (getOption("ALSroads.debug.finding")) plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
 
   return(path)
 }

@@ -34,9 +34,9 @@
 #' library(sf)
 #' library(raster)
 #'
-#' dir  <- system.file("extdata", "", package="MFFProads")
-#' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="MFFProads")
-#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="MFFProads")
+#' dir  <- system.file("extdata", "", package="ALSroads")
+#' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="ALSroads")
+#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="ALSroads")
 #' ctg  <- readLAScatalog(dir)
 #' road <- st_read(road, "original", quiet = TRUE)
 #' dtm  <- raster(dtm)
@@ -68,7 +68,7 @@
 #' leaflet::addTiles(m@map, url)
 #'
 #' \dontrun{
-#' conductivity <- system.file("extdata", "j5gr_conductivity.tif", package="MFFProads")
+#' conductivity <- system.file("extdata", "j5gr_conductivity.tif", package="ALSroads")
 #' conductivity <- raster(conductivity)
 #' plot(conductivity, col = viridis::viridis(50))
 #'
@@ -77,13 +77,13 @@
 #' plot(st_geometry(road), col = "red") # Inaccurate road track
 #' plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 #' }
-#' @useDynLib MFFProads, .registration = TRUE
+#' @useDynLib ALSroads, .registration = TRUE
 #' @import data.table
 measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water = NULL, param = mffproads_default_parameters, ...)
 {
   # Plenty of checks before to run anything
   dots <- list(...)
-  lidR::opt_progress(ctg) <- getOption("MFFProads.debug.verbose")
+  lidR::opt_progress(ctg) <- getOption("ALSroads.debug.verbose")
   geometry_type_road <- sf::st_geometry_type(centerline)
   if (geometry_type_road != "LINESTRING") stop(glue::glue("Expecting LINESTRING geometry for 'centerline' but found {geometry_type_road} geometry instead."), call. = FALSE)
   if (nrow(centerline) > 1) stop("Expecting a single LINESTRING", call. = FALSE)
@@ -100,7 +100,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   if (!isFALSE(dots$Windex)) alert_no_index(ctg)
 
   # Display progress
-  if (getOption("MFFProads.debug.progress")) cat("Progress: ")
+  if (getOption("ALSroads.debug.progress")) cat("Progress: ")
 
   # Check for weird roads. We already found a road with a 90 degrees node
   # at the end of the road and it broke the output
@@ -298,7 +298,7 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
   i <- 1:nrow(roads)
   res <- lapply(i, function(j)
   {
-    if (getOption("MFFProads.debug.verbose") | getOption("MFFProads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
+    if (getOption("ALSroads.debug.verbose") | getOption("ALSroads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
     measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
   })
 

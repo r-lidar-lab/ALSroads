@@ -2,18 +2,18 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 fsd <- function(x) {
-    .Call(`_MFFProads_fsd`, x)
+    .Call(`_ALSroads_fsd`, x)
 }
 
 ffsd <- function(x) {
-    .Call(`_MFFProads_ffsd`, x)
+    .Call(`_ALSroads_ffsd`, x)
 }
 
 quadtree <- function(las) {
-    .Call(`_MFFProads_quadtree`, las)
+    .Call(`_ALSroads_quadtree`, las)
 }
 
 filter_orectangle_with_index <- function(xptr, xmin, ymin, xmax, ymax, angle) {
-    .Call(`_MFFProads_filter_orectangle_with_index`, xptr, xmin, ymin, xmax, ymax, angle)
+    .Call(`_ALSroads_filter_orectangle_with_index`, xptr, xmin, ymin, xmax, ymax, angle)
 }
 

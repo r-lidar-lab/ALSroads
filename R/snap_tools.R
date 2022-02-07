@@ -14,7 +14,7 @@
 #'
 #' @return The same object as \code{roads} but with corrected ending such that roads are connected.
 #' @examples
-#' f <- system.file("extdata", "j53e_network.gpkg", package="MFFProads")
+#' f <- system.file("extdata", "j53e_network.gpkg", package="ALSroads")
 #'
 #' ref <- sf::st_read(f, layer = "original")  # input of measure_roads
 #' cor <- sf::st_read(f, layer = "corrected") # output of measure_roads
