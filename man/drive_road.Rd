@@ -28,8 +28,8 @@ of road segment pointing in the right direction.
 library(raster)
 library(sf)
 
-conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "MFFProads")
-starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "MFFProads")
+conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "ALSroads")
+starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "ALSroads")
 
 conductivity <- raster(conductivity)
 starting <- st_read(starting, "starting_road", quiet = TRUE)

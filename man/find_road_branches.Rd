@@ -22,8 +22,8 @@ a conductivity raster and the line geometry of the main road.
 library(sf)
 library(terra)
 
-road <- system.file("extdata", "j53e_drived_road.gpkg", package="MFFProads")
-conductivity <- system.file("extdata", "j53e_conductivity.tif", package="MFFProads")
+road <- system.file("extdata", "j53e_drived_road.gpkg", package="ALSroads")
+conductivity <- system.file("extdata", "j53e_conductivity.tif", package="ALSroads")
 
 road <- st_read(road, "drived_road", quiet = TRUE)
 conductivity <- rast(conductivity)
