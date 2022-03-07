@@ -11,7 +11,7 @@ measure_road(
   dtm = NULL,
   conductivity = NULL,
   water = NULL,
-  param = mffproads_default_parameters,
+  param = alsroads_default_parameters,
   ...
 )
 
@@ -21,7 +21,7 @@ measure_roads(
   dtm,
   conductivity = NULL,
   water = NULL,
-  param = mffproads_default_parameters
+  param = alsroads_default_parameters
 )
 }
 \arguments{
@@ -37,7 +37,7 @@ if will be computed on the fly but the layer can be pre-computed with \link{rast
 bodies so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows
 to detect bridges above water.}
 
-\item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
+\item{param}{a list of many parameters. See \link{alsroads_default_parameters}.}
 
 \item{...}{unused}
 
