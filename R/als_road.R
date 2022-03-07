@@ -93,6 +93,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
   if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
   if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
+  crs <- sf::st_crs(centerline)
 
   # If the collection is not indexed we throw a warning and even an error if the density is high
   # Without spatial indexation the centerline extraction is terribly long
@@ -114,7 +115,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   relocate <- param[["constraint"]][["confidence"]] < 1
 
   # Get the units to display informative messages
-  dist_unit  <- sf::st_crs(centerline)$units
+  dist_unit  <- crs$units
 
   # We generate a default output in case we should exit early the function.
   # Basically a road with the original geometry and NA metrics
@@ -243,7 +244,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   {
     spline <- adjust_spline(slice_metrics)
     spline <- sf::st_simplify(spline, dTolerance = 1)
-    spline <- sf::st_set_crs(spline, sf::st_crs(las))
+    spline <- sf::st_set_crs(spline, crs)
     sf::st_geometry(new_road) <- spline
   }
 
@@ -266,6 +267,8 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
+  sf::st_crs(new_road) <- sf::NA_crs_
+  sf::st_crs(new_road) <- crs
 
   # For a redrawn centerline, check if the ends of the
   # new road are suspiciously close to the edge of the caps
