@@ -140,7 +140,8 @@ mask_conductivity <- function(conductivity, centerline, param)
   xy$z <- 0
   names(xy) <- c("X", "Y", "Z")
   xy <- lidR::LAS(xy, lidR::LASheader(xy))
-  lidR::projection(xy) <- sf::st_crs(caps$caps)
+  xy@header$`Global Encoding`$WKT = TRUE
+  lidR::st_crs(xy) <- sf::st_crs(caps$caps)
 
   res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
   conductivity[res] <- 1
