@@ -46,11 +46,12 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   resolution <- resolution[1]
 
   # Initialization of list of coordinates with starting line
-  start_pts <- sf::st_geometry(sf::st_cast(starting_road, "POINT"))
+  start_pts <- sf::st_cast(sf::st_geometry(starting_road), "POINT")
   n <- length(start_pts)
   start <- start_pts[n-1][[1]]
   end   <- start_pts[n][[1]]
   list_coords <- list(start, end)
+  list_lines <- list(sf::st_geometry(starting_road)[[1]])
   heading <- get_heading(start, end)
 
   sub_aoi_conductivity <- query_conductivity_aoi(conductivity, starting_road)
@@ -60,21 +61,13 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   #plot(starting_road, add = T, lwd = 3, col = "red")
 
   # Init view angles as a function of the resolution of the raster and the sightline
-  angular_resolution <- floor((resolution / sightline) * (180 / pi))
-  angles <- seq(angular_resolution, fov, angular_resolution)
-  angles <- c(rev(-angles), 0, angles)
-  angles_rad <- angles * pi / 180
-
-  # Set penalty coefficient for each view angle
-  penalty_at_45_degrees <- 1.25 # Could be set as a parameter
-  penalty <- abs(angles) / fov
-  penalty <- penalty * (penalty_at_45_degrees - 1) + 1
+  angles_rad <- generate_angles(resolution, sightline, fov)
 
   # Loop initialisation
   current_cost <- 0
   k <- 2
   cat("Driving the conductivity raster\n")
-  while (current_cost <= cost_max & k < 40)
+  while (current_cost <= cost_max)
   {
     if (k %% 2 == 0) cat("", (k-1)*sightline, " m\r", sep = "")
     flush.console()
@@ -85,25 +78,30 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
     heading <- get_heading(p1, p2)
 
     # Create all possible ends ahead of the previous point
-    X <- p2[1] + sightline * cos(heading + angles_rad)
-    Y <- p2[2] + sightline * sin(heading + angles_rad)
-    M <- data.frame(X,Y)
+    start <- sf::st_sfc(p2)
+    ends <- generate_ends(p2, angles_rad, sightline, heading)
 
     # Generate a very small area of interest to analyse
-    start <- sf::st_sfc(p2)
-    ends <- sf::st_as_sf(M, coords = c("X", "Y"))
     search_zone <- sf::st_bbox(c(start, sf::st_geometry(ends))) + c(-1,-1,1,1)*resolution
     aoi <- raster::crop(sub_aoi_conductivity, search_zone)
-    #plot(aoi, col = viridis::viridis(50))
+    pol <- c(start, ends$geometry, start)
+    pol <- sf::st_coordinates(pol)
+    pol <- sf::st_polygon(list(pol))
+    pol <- sf::st_sfc(pol)
+    pol <- sf::st_buffer(pol, resolution)
+    aoi <- raster::mask(aoi, sf::as_Spatial(pol))
+    #plot(sf::st_as_sfc(search_zone))
+    #plot(aoi, col = viridis::viridis(50), add = T)
     #plot(start, add = T, pch = 19, col = "red")
     #plot(ends, pch = 19, add = T, col = "red")
+    #plot(pol, add = T, border = "green")
 
     # Compute the transition matrix for this AOI
     trans <- transition(aoi, geocorrection = TRUE)
 
     # Check if some ends fall outside of the AOI conductivity raster
     # If any reload another raster part further ahead.
-    val <- raster::extract(aoi, M)
+    val <- raster::extract(aoi, ends)
     if (any(is.na(val)))
     {
       #cat("\nReaching bounds of AOI. Loading next AOI\n")
@@ -122,8 +120,18 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
       #plot(starting_road, add = T, lwd = 3, col = "red")
 
       # Check again if some ends fall outside of the newly cropped conductivity raster
-      val <- raster::extract(sub_aoi_conductivity, M)
-      if (any(is.na(val))) {
+      # If yes we are close to the edge of the raster. Try again with half the sightline
+      val <- raster::extract(sub_aoi_conductivity, ends)
+      if (any(is.na(val)))
+      {
+        tmp_angles_rad <- generate_angles(resolution, sightline/2, fov)
+        ends <- generate_ends(p2, tmp_angles_rad, sightline/2, heading)
+      }
+
+      # If we still have NA we reach the border of the conductivity map
+      val <- raster::extract(sub_aoi_conductivity, ends)
+      if (any(is.na(val)))
+      {
         warning("Drive stopped early. Edge of conductivity raster has been reached.", call. = FALSE)
         cost_max <- -Inf
       }
@@ -139,32 +147,40 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
       cost <- gdistance::costDistance(trans, sf::as_Spatial(start), sf::as_Spatial(ends)) |> suppressWarnings()
       cost <- as.numeric(cost)
       cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
-      cost2 <- ma(cost * penalty, n = 5)
-      ends$cost <- cost2
-
-      #paths = gdistance::shortestPath(trans, sf::as_Spatial(start), sf::as_Spatial(ends), output = "SpatialLines") |> suppressWarnings()
-      #plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
-      #plot(ends, pal = viridis::viridis, pch = 19, add = T, breaks = "quantile")
-      #plot(p1, col = "red", pch = 19, add = T)
-      #plot(p2, col = "red", pch = 19, add = T)
-      #plot(paths, add = T, col = "red")
-      #plot(angles, log(cost), type = "b")
-      #points(angles, log(cost2), col = "blue", type = "b")
+      ends$cost <- cost
 
       # Select point coordinates with the lowest
-      # penalty adjusted cost
-      idx_min <- which.min(cost2)
+      idx_min <- which.min(cost)
       current_cost <- cost[idx_min]
-      W <- M[idx_min,] |> as.matrix() |> sf::st_point()
+      end <- ends[idx_min,]
+      W <- sf::st_geometry(end)[[1]]
+      L = gdistance::shortestPath(trans, sf::as_Spatial(start), sf::as_Spatial(end), output = "SpatialLines") |> suppressWarnings()
+      L <- sf::st_geometry(sf::st_as_sf(L))
 
-      plot(sf::st_sfc(W), add = T, col = "red", pch = 19)
+      if (FALSE)
+      {
+        #plot(angles_rad, log(cost), type = "b")
+        paths = gdistance::shortestPath(trans, sf::as_Spatial(start), sf::as_Spatial(ends), output = "SpatialLines") |> suppressWarnings()
+        plot(raster::crop(conductivity, raster::extent(ends) + 100), col = viridis::viridis(50))
+        tryCatch({
+          plot(ends, pal = viridis::viridis, pch = 19, add = T, breaks = "quantile")
+        }, error = function(x) {
+            plot(ends$geometry, col = "red", add = T, pch = 19, cex = 0.5)
+        })
+        plot(p1, col = "red", pch = 19, add = T)
+        plot(p2, col = "red", pch = 19, add = T)
+        plot(paths, add = T, col = "red")
+        print(current_cost)
+        plot(sf::st_sfc(W), add = T, col = "green", pch = 19, cex = 2)
+      }
 
       k <- k + 1
       list_coords[[k]] <- W
+      list_lines[[k-1]] <- L[[1]]
     }
   }
 
-  newline <- sf::st_sfc(list_coords) |>
+  newline <- sf::st_sfc(list_lines) |>
     sf::st_coordinates() |>
     sf::st_linestring() |>
     sf::st_sfc() |>
@@ -444,3 +460,22 @@ query_conductivity_aoi <- function(conductivity, starting_road)
 #' new_roads <- do.call(c, new_roads)
 #' plot(new_roads, add = TRUE, col = "red", lwd = 2)
 NULL
+
+
+generate_angles <- function(resolution, sightline, fov)
+{
+  angular_resolution <- floor(1.5 * (resolution / sightline) * (180 / pi))
+  angles <- seq(angular_resolution, fov, angular_resolution)
+  angles <- c(rev(-angles), 0, angles)
+  angles_rad <- angles * pi / 180
+  angles_rad
+}
+
+generate_ends <- function(center, angles, sightline, direction)
+{
+  center <- sf::st_coordinates(center)
+  X <- center[1] + sightline * cos(direction + angles)
+  Y <- center[2] + sightline * sin(direction + angles)
+  M <- data.frame(X,Y)
+  sf::st_as_sf(M, coords = c("X", "Y"))
+}
