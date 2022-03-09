@@ -183,6 +183,20 @@ find_path = function(conductivity, centerline, A, B, param)
 {
   caps <- make_caps(centerline, param)$caps
 
+  # Caps rasterisation
+  caps_raster <- conductivity
+  xy <- raster::xyFromCell(caps_raster, 1: raster::ncell(caps_raster))
+  xy <- as.data.frame(xy)
+  xy$z <- 0
+  names(xy) <- c("X", "Y", "Z")
+  xy <- lidR::LAS(xy, lidR::LASheader(xy))
+  lidR::projection(xy) <- sf::st_crs(caps$caps)
+  res <- !is.na(lidR:::point_in_polygons(xy, caps$caps))
+  caps_raster[res] <- 1
+  caps_raster[!res] <- 0
+  res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
+  caps_raster[res] <- 0
+
   trans <- transition(conductivity)
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
@@ -203,7 +217,7 @@ find_path = function(conductivity, centerline, A, B, param)
 
   # Trim vertex inside caps
   coords <- st_coordinates(path)[,1:2]
-  val <- raster::extract(conductivity, coords)
+  val <- raster::extract(caps_raster, coords)
   path <- sf::st_linestring(coords[val != 1,])
 
   path <- sf::st_sfc(path)
