@@ -81,9 +81,12 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
   A  <- AB$A
   B  <- AB$B
 
+  # Compute the transition
+  trans <- transition(conductivity)
+
   # Find the path
   verbose("Computing least cost path...\n")
-  path <- find_path(conductivity, centerline, A, B, param)
+  path <- find_path(trans, centerline, A, B, param)
 
   return(path)
 }
@@ -179,11 +182,11 @@ transition <- function(conductivity)
   return(trans)
 }
 
-find_path = function(conductivity, centerline, A, B, param)
+find_path = function(trans, centerline, A, B, param)
 {
   # Caps rasterisation
-  caps_raster <- conductivity
   caps <- make_caps(centerline, param)
+  caps_raster <- raster::raster(trans)
   xy <- raster::xyFromCell(caps_raster, 1: raster::ncell(caps_raster))
   xy <- as.data.frame(xy)
   xy$z <- 0
@@ -196,7 +199,7 @@ find_path = function(conductivity, centerline, A, B, param)
   res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
   caps_raster[res] <- 0
 
-  trans <- transition(conductivity)
+  
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
