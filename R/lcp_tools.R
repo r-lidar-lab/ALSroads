@@ -132,7 +132,7 @@ mask_conductivity <- function(conductivity, centerline, param)
   verbose("   - Road rasterization and distance factor map\n")
 
   # Set a conductivity of 1 in the caps and 0 on the outer half ring link in figure 6
-  # We could use raster::cellFromPolygon but it is slow. This workaround using lidR is complex butfast.
+  # We could use raster::cellFromPolygon but it is slow. This workaround using lidR is complex but fast.
   # Maybe using terra we could simplify the code.
   caps <- make_caps(centerline, param)
   xy <- raster::xyFromCell(conductivity, 1: raster::ncell(conductivity))
@@ -262,8 +262,8 @@ make_caps <- function(centerline, param)
   cap_A <- sf::st_buffer(A, buf)
   cap_B <- sf::st_buffer(B, buf)
 
-  shield_A <- sf::st_buffer(A, buf - 5)
-  shield_B <- sf::st_buffer(B, buf - 5)
+  shield_A <- sf::st_buffer(A, buf - 6)
+  shield_B <- sf::st_buffer(B, buf - 6)
   shield <- sf::st_union(shield_A, shield_B)
 
   caps_A <- sf::st_difference(cap_A, poly1)
@@ -278,7 +278,7 @@ make_caps <- function(centerline, param)
 
   caps <- c(caps_A, caps_B)
   caps <- sf::st_union(caps)
-  shield <- sf::st_difference(caps, shield)
+  shield <- sf::st_difference(sf::st_buffer(sf::st_union(caps, sf::st_union(poly1, poly2)), 0.01), shield)
 
   sf::st_crs(caps) <- sf::st_crs(centerline)
   sf::st_crs(shield) <- sf::st_crs(centerline)
