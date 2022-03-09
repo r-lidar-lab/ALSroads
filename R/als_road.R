@@ -260,32 +260,21 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   new_geometry <- sf::st_geometry(new_road)
   attribute_table <- cbind(sf::st_drop_geometry(centerline), metrics)
   attribute_table[[ngeom]] <- new_geometry
-
-  # If the class of the road is 3 or 4 it is supposed to do not exist. Thus the centerline found is
-  # likely to be irrelevant. We put back the original geometry to avoid doing worst than the original
-  if (attribute_table[["CLASS"]] > 2)
-    attribute_table[[ngeom]] <- original_geometry
-
   new_road <- sf::st_as_sf(attribute_table)
   sf::st_crs(new_road) <- sf::NA_crs_
   sf::st_crs(new_road) <- crs
 
-  # For a redrawn centerline, check if the ends of the
-  # new road are suspiciously close to the edge of the caps
-  if (attribute_table[["CLASS"]] %in% c(1,2))
-  {
-    start_ori <- lwgeom::st_startpoint(centerline)
-    start_new <- lwgeom::st_startpoint(new_road)
-    start_diff <- as.numeric(sf::st_distance(start_ori, start_new))
+  # Check if the ends of the new road are suspiciously close to the edge of the caps
+  start_ori <- lwgeom::st_startpoint(centerline)
+  start_new <- lwgeom::st_startpoint(new_road)
+  start_diff <- as.numeric(sf::st_distance(start_ori, start_new))
 
-    end_ori <- lwgeom::st_endpoint(centerline)
-    end_new <- lwgeom::st_endpoint(new_road)
-    end_diff <- as.numeric(sf::st_distance(end_ori, end_new))
+  end_ori <- lwgeom::st_endpoint(centerline)
+  end_new <- lwgeom::st_endpoint(new_road)
+  end_diff <- as.numeric(sf::st_distance(end_ori, end_new))
 
-    if (max(start_diff, end_diff) > param[["extraction"]][["road_buffer"]] * 0.8) {
-      warning("Road within 20% of the edge of an end cap radius at one or both ends. The computed centerline may have taken a shortcut through the woods.", call. = FALSE)
-    }
-  }
+  if (max(start_diff, end_diff) > param[["extraction"]][["road_buffer"]] * 0.8)
+    warning("Road within 20% of the edge of an end cap radius at one or both ends. The computed centerline may have taken a shortcut through the woods.", call. = FALSE)
 
   verbose("Done\n") ; cat("\n")
   new_road <- rename_sf_column(new_road, centerline)
