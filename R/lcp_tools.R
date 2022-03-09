@@ -216,7 +216,7 @@ find_path = function(conductivity, centerline, A, B, param)
   len  <- sf::st_length(path)
 
   # Trim vertex inside caps
-  coords <- st_coordinates(path)[,1:2]
+  coords <- sf::st_coordinates(path)[,1:2]
   val <- raster::extract(caps_raster, coords)
   path <- sf::st_linestring(coords[val != 1,])
 
