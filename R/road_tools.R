@@ -14,8 +14,8 @@ road_measure = function(las, road, param)
   end <- coords_road[nrow(coords_road),1:2]
 
   # Split the path in n sections of ~ same length
-  path_lenght <- as.numeric(sf::st_length(road))
-  each <- param[["extraction"]][["section_length"]]/path_lenght
+  path_length <- as.numeric(sf::st_length(road))
+  each <- param[["extraction"]][["section_length"]]/path_length
   at <- round(seq(0,1, each),4)
   at[length(at)] = 1
   points <- sf::st_line_sample(road, sample = at)
@@ -31,7 +31,7 @@ road_measure = function(las, road, param)
   dd  <- sqrt(dx*dx+dy*dy)
   dist <- cumsum(dd[-length(dd)])
   pdist <- dist/dist[length(dist)]
-  points$DISTANCE <- path_lenght*pdist
+  points$DISTANCE <- path_length*pdist
 
   # We can now loop through each segment between two consecutive points
   n <- nrow(CC)
