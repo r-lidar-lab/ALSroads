@@ -81,12 +81,9 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
   A  <- AB$A
   B  <- AB$B
 
-  # Compute the transition
-  trans <- transition(conductivity)
-
   # Find the path
   verbose("Computing least cost path...\n")
-  path <- find_path(trans, centerline, A, B, param)
+  path <- find_path(conductivity, centerline, A, B, param)
 
   return(path)
 }
@@ -182,9 +179,11 @@ transition <- function(conductivity)
   return(trans)
 }
 
-find_path = function(trans, centerline, A, B, param)
+find_path = function(conductivity, centerline, A, B, param)
 {
   caps <- make_caps(centerline, param)$caps
+
+  trans <- transition(conductivity)
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
@@ -201,10 +200,15 @@ find_path = function(trans, centerline, A, B, param)
   path <- gdistance::shortestPath(trans, A, B, output = "SpatialLines") |> suppressWarnings()
   path <- sf::st_as_sf(path)
   len  <- sf::st_length(path)
+
+  # Trim vertex inside caps
+  coords <- st_coordinates(path)[,1:2]
+  val <- raster::extract(conductivity, coords)
+  path <- sf::st_linestring(coords[val != 1,])
+
+  path <- sf::st_sfc(path)
+  path <- sf::st_sf(path, crs = sf::st_crs(centerline))
   path <- sf::st_simplify(path, dTolerance = 3)
-  path <- sf::st_set_crs(path, sf::NA_crs_)
-  path <- sf::st_set_crs(path, sf::st_crs(centerline))
-  path <- sf::st_difference(path, caps)
   path$CONDUCTIVITY <- round(as.numeric(len/cost),2)
 
   if (getOption("ALSroads.debug.finding")) plot(sf::st_geometry(path), col = "red", add = T, lwd = 2)
