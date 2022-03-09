@@ -7,7 +7,7 @@
 rasterize_conductivity(
   las,
   dtm = NULL,
-  param = mffproads_default_parameters,
+  param = alsroads_default_parameters,
   ...
 )
 }
@@ -17,7 +17,7 @@ rasterize_conductivity(
 \item{dtm}{RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
 available it can be given to the function.}
 
-\item{param}{a list of many parameters. See \link{mffproads_default_parameters}.}
+\item{param}{a list of many parameters. See \link{alsroads_default_parameters}.}
 
 \item{...}{ignored}
 }

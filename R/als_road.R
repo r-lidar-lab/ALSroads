@@ -13,7 +13,7 @@
 #' with \link[lidR:grid_terrain]{grid_terrain}. It can be missing if a conductivity layer is provided
 #' @param conductivity RasterLayer storing the pre-computed conductivity. It can be NULL in this case
 #' if will be computed on the fly but the layer can be pre-computed with \link{rasterize_conductivity}
-#' @param param a list of many parameters. See \link{mffproads_default_parameters}.
+#' @param param a list of many parameters. See \link{alsroads_default_parameters}.
 #' @param water a set of spatial polygons (sf format) of water bodies. This is used to mask the water
 #' bodies so they cannot be mistaken as a drivable surfaces. Not mandatory but can help. It also allows
 #' to detect bridges above water.
@@ -79,7 +79,7 @@
 #' }
 #' @useDynLib ALSroads, .registration = TRUE
 #' @import data.table
-measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water = NULL, param = mffproads_default_parameters, ...)
+measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water = NULL, param = alsroads_default_parameters, ...)
 {
   # Plenty of checks before to run anything
   dots <- list(...)
@@ -93,6 +93,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
   if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
   if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
+  crs <- sf::st_crs(centerline)
 
   # If the collection is not indexed we throw a warning and even an error if the density is high
   # Without spatial indexation the centerline extraction is terribly long
@@ -114,7 +115,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   relocate <- param[["constraint"]][["confidence"]] < 1
 
   # Get the units to display informative messages
-  dist_unit  <- sf::st_crs(centerline)$units
+  dist_unit  <- crs$units
 
   # We generate a default output in case we should exit early the function.
   # Basically a road with the original geometry and NA metrics
@@ -243,7 +244,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   {
     spline <- adjust_spline(slice_metrics)
     spline <- sf::st_simplify(spline, dTolerance = 1)
-    spline <- sf::st_set_crs(spline, sf::st_crs(las))
+    spline <- sf::st_set_crs(spline, crs)
     sf::st_geometry(new_road) <- spline
   }
 
@@ -266,6 +267,8 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
     attribute_table[[ngeom]] <- original_geometry
 
   new_road <- sf::st_as_sf(attribute_table)
+  sf::st_crs(new_road) <- sf::NA_crs_
+  sf::st_crs(new_road) <- crs
 
   # For a redrawn centerline, check if the ends of the
   # new road are suspiciously close to the edge of the caps
@@ -291,7 +294,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
 
 #' @export
 #' @rdname measure_road
-measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, param = mffproads_default_parameters)
+measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, param = alsroads_default_parameters)
 {
   alert_no_index(ctg)
 

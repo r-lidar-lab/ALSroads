@@ -87,7 +87,7 @@ param = list(
 #' - **percentage_veg_thresholds**:
 #' - **drivable_width_thresholds**:
 #' @examples
-#' str(mffproads_default_parameters)
+#' str(alsroads_default_parameters)
 #' @export
 #' @md
-mffproads_default_parameters = param
+alsroads_default_parameters = param

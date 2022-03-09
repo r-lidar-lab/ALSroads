@@ -6,7 +6,7 @@
 #' @param las an object of class LAS or LAScatalog from lidR
 #' @param dtm RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
 #' available it can be given to the function.
-#' @param param a list of many parameters. See \link{mffproads_default_parameters}.
+#' @param param a list of many parameters. See \link{alsroads_default_parameters}.
 #' @param ... ignored
 #'
 #' @examples
@@ -27,13 +27,13 @@
 #' }
 #' @return a RasterLayer or SpatRaster
 #' @export
-rasterize_conductivity <- function(las, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity <- function(las, dtm = NULL, param = alsroads_default_parameters, ...)
 {
   UseMethod("rasterize_conductivity", las)
 }
 
 #' @export
-rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default_parameters, ...)
 {
   use_intensity <- "Intensity" %in% names(las)
   display <- getOption("ALSroads.debug.finding")
@@ -232,7 +232,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = mffproads_defaul
 }
 
 #' @export
-rasterize_conductivity.LAScluster = function(las, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAScluster = function(las, dtm = NULL, param = alsroads_default_parameters, ...)
 {
   x <- lidR::readLAS(las)
   if (lidR::is.empty(x)) return(NULL)
@@ -243,7 +243,7 @@ rasterize_conductivity.LAScluster = function(las, dtm = NULL, param = mffproads_
 }
 
 #' @export
-rasterize_conductivity.LAScatalog = function(las, dtm = NULL, param = mffproads_default_parameters, ...)
+rasterize_conductivity.LAScatalog = function(las, dtm = NULL, param = alsroads_default_parameters, ...)
 {
   # Enforce some options
   if (lidR::opt_select(las) == "*") lidR::opt_select(las) <- "xyzci"
