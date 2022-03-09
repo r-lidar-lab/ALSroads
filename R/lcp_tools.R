@@ -181,10 +181,9 @@ transition <- function(conductivity)
 
 find_path = function(conductivity, centerline, A, B, param)
 {
-  caps <- make_caps(centerline, param)$caps
-
   # Caps rasterisation
   caps_raster <- conductivity
+  caps <- make_caps(centerline, param)
   xy <- raster::xyFromCell(caps_raster, 1: raster::ncell(caps_raster))
   xy <- as.data.frame(xy)
   xy$z <- 0
