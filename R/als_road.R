@@ -264,17 +264,6 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   sf::st_crs(new_road) <- sf::NA_crs_
   sf::st_crs(new_road) <- crs
 
-  # Check if the ends of the new road are suspiciously close to the edge of the caps
-  start_ori <- lwgeom::st_startpoint(centerline)
-  start_new <- lwgeom::st_startpoint(new_road)
-  start_diff <- as.numeric(sf::st_distance(start_ori, start_new))
-
-  end_ori <- lwgeom::st_endpoint(centerline)
-  end_new <- lwgeom::st_endpoint(new_road)
-  end_diff <- as.numeric(sf::st_distance(end_ori, end_new))
-
-  if (max(start_diff, end_diff) > param[["extraction"]][["road_buffer"]] * 0.8)
-    warning("Road within 20% of the edge of an end cap radius at one or both ends. The computed centerline may have taken a shortcut through the woods.", call. = FALSE)
 
   verbose("Done\n") ; cat("\n")
   new_road <- rename_sf_column(new_road, centerline)

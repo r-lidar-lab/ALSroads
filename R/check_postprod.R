@@ -118,7 +118,7 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 }
 
 
-#' Compute distances quantiles based on how much the two roads are far apart
+#' Compute distances quantiles based on how far apart the two roads are
 #'
 #' Sample points at regular interval each road and measure distances between
 #' each pair of points. The larger the quantiles are, the larger the differences
@@ -127,9 +127,9 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
 #' @param road_cor  line (\code{sf} or \code{sfc} format). Corrected road.
 #' @param step  numeric (distance unit). Interval on \code{road_ori} at which sample differences.
-#' @param graph  boolean. Whether of not to display graphics.
+#' @param graph  boolean. Whether or not to display graphics.
 #'
-#' @return named numeric. Quantiles are P50, P90, P100.
+#' @return named numeric. Quantiles P50, P90, P100 along with the maximal difference found at both ends.
 #' @noRd
 #' @examples
 #' library(sf)
@@ -166,13 +166,21 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
   ls_pts <- lapply(c(road_ori, road_cor), st_full_line_sample, n_steps)
   names(ls_pts) <- c("road_ori", "road_cor")
 
-
-  # Compute differences at P50, P90, P100
+  # Calculate distance between each pair of points
   dist_step <- sf::st_distance(ls_pts[["road_ori"]], ls_pts[["road_cor"]]) |>
     diag() |>
     as.numeric()
 
+  # Compute P50, P90 and P100
+  # Large values, especially at P50, might indicate that the corrected road
+  # took a completely new (and wrong) path
   p <- stats::quantile(dist_step, probs = c(0.5, 0.90, 1))
+  names(p) <- c("P50", "P90", "P100")
+
+  # Compute the maximal difference distance between the pairs at the first and last vertex.
+  # A value near the one of alsroads_default_parameters$extraction$road_buffer might
+  # indicate a problem right at the start/end of the least-cost path extraction process
+  dist_end_max <- c(end_max = max(dist_step[c(1, length(dist_step))]))
 
 
   # Display graphical representation of the differences
@@ -205,5 +213,5 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     graphics::title("Pairwise distances along roads", sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
   }
 
-  return(p)
+  return(c(p, dist_end_max))
 }
