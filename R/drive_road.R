@@ -29,8 +29,6 @@
 #' plot(res, add = TRUE, col = "red", lwd = 2)
 drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
 {
-  # The idea is to only extract values that are mostly ahead of the line
-
   t0 <- Sys.time()
 
   # Threshold of cost to stop the search.
@@ -38,6 +36,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   cost_max <- sightline * 1/min_conductivity
 
   # Constant definition
+  # The idea is to only extract values that are mostly ahead of the line from a potentially very large VRT
   buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
 
   # We need an orthonormal raster
@@ -66,8 +65,9 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
   # Loop initialisation
   current_cost <- 0
   k <- 2
+  overcost = 0
   cat("Driving the conductivity raster\n")
-  while (current_cost <= cost_max)
+  while (overcost <= 1 & !is.infinite(cost_max))
   {
     if (k %% 2 == 0) cat("", (k-1)*sightline, " m\r", sep = "")
     flush.console()
@@ -77,7 +77,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
     p2 <- list_coords[[k]]
     heading <- get_heading(p1, p2)
 
-    # Create all possible ends ahead of the previous point
+    # Create all possible ends ahead of the previous points
     start <- sf::st_sfc(p2)
     ends <- generate_ends(p2, angles_rad, sightline, heading)
 
@@ -128,7 +128,7 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
         ends <- generate_ends(p2, tmp_angles_rad, sightline/2, heading)
       }
 
-      # If we still have NA we reach the border of the conductivity map
+      # If we still have NA we reached the border of the conductivity map
       val <- raster::extract(sub_aoi_conductivity, ends)
       if (any(is.na(val)))
       {
@@ -177,8 +177,15 @@ drive_road <- function(starting_road, conductivity, fov = 45, sightline = 10)
       k <- k + 1
       list_coords[[k]] <- W
       list_lines[[k-1]] <- L[[1]]
+
+      if (current_cost > cost_max)
+        overcost = overcost + 1
+      else
+        overcost = 0
     }
   }
+
+  list_lines = list_lines[1:(length(list_lines)-overcost)]
 
   newline <- sf::st_sfc(list_lines) |>
     sf::st_coordinates() |>
@@ -248,7 +255,7 @@ find_road_branches <- function(road, conductivity)
   }
 
   # 3 levels of buffer around the road
-  d1 <-3
+  d1 <- 3
   d2 <- 20
   d3 <- 50
   buffer0 <- sf::st_buffer(road, d1)
@@ -258,7 +265,7 @@ find_road_branches <- function(road, conductivity)
 
   # Compute the average conductivity of the road
   m_conductivity <- terra::extract(conductivity, terra::vect(buffer0))[[2]]
-  m_conductivity <- quantile(m_conductivity, na.rm = T, probs = 0.33)
+  m_conductivity <- quantile(m_conductivity, na.rm = T, probs = 0.5)
 
   # Ensure continuity of the road
   conductivity <- terra::crop(conductivity, terra::vect(buffer2))
@@ -273,6 +280,7 @@ find_road_branches <- function(road, conductivity)
   # Find the biggest clump of pixels. This is the road and its branches (hopefully).
   # (Can be reworked easily to ensure it is really the road)
   conductivity_search_zone_clump <- conductivity_search_zone |> terra::patches(directions = 8)
+  #plot(conductivity_search_zone_clump)
   tmp <- table(conductivity_search_zone_clump[])
   best_patch <- as.numeric(names(which.max(tmp)))
   conductivity_search_zone_clump[conductivity_search_zone_clump != best_patch] <- NA
@@ -280,7 +288,7 @@ find_road_branches <- function(road, conductivity)
 
   # Extract the branch from the road my masking the road
   conductivity_search_zone_clump <- terra::mask(conductivity_search_zone_clump, terra::vect(search_zone))
-  #plot(conductivity_search_zone_clump)
+  # plot(conductivity_search_zone_clump)
 
   # Recompute again patches to remove small clumps
   conductivity_search_zone_clump <- terra::patches(conductivity_search_zone_clump, directions = 8)
@@ -337,7 +345,7 @@ find_road_branches <- function(road, conductivity)
     #plot(sigma,  col = viridis::viridis(50))
     #plot(st_geometry(starts[i]), cex = 1, pch = 19, col = "red", add = T)
     #plot(st_geometry(ends[i]), cex = 1, pch = 19, col = "red", add = T)
-    trans <- MFFProads:::transition(raster::raster(sigma))
+    trans <- transition(raster::raster(sigma))
     path  <- gdistance::shortestPath(trans, sf::as_Spatial(starts[i]), sf::as_Spatial(ends[i]), output = "SpatialLines") |> suppressWarnings()
     cost  <- gdistance::costDistance(trans, sf::as_Spatial(starts[i]), sf::as_Spatial(ends[i]))
     path  <- sf::st_as_sf(path)
@@ -438,8 +446,8 @@ query_conductivity_aoi <- function(conductivity, starting_road)
 #' library(raster)
 #' library(sf)
 #'
-#' conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "MFFProads")
-#' starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "MFFProads")#'
+#' conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "ALSroads")
+#' starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "ALSroads")#'
 #' conductivity <- raster(conductivity)
 #' starting <- st_read(starting, "starting_road", quiet = TRUE)
 #'
