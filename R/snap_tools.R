@@ -174,7 +174,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
                          sapply(ls_heading, utils::head, 1))
 
   tb_ends_ref <- rbind(tb_endpoint, tb_startpoint) |>
-    dplyr::mutate(norm_heading = ifelse(heading_tail_head < 0, heading_tail_head + 180, heading_tail_head))
+    dplyr::mutate(heading = heading_tail_head)
 
 
   # List of distinct connected nodes in the non-corrected/reference road dataset
@@ -414,7 +414,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
   if (nrow(df_pts_warn))
     pts_warn <- sf::st_as_sf(x = df_pts_warn, coords = c("X","Y"), crs = sf::st_crs(roads))
 
-  return(list(roads = roads, warnings = pts_warn))
+  return(list(roads = dplyr::select(roads, -UPDATABLE), warnings = pts_warn))
 }
 
 
@@ -463,31 +463,48 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 
 #' Find best connexion between two lines at a junction
 #'
-#' At a junction with multiples lines, find which two lines that are the most likely
-#' to be the extension of each other. The prime factor is the angle formed between
+#' At a junction with multiple lines, find which two lines are the most likely
+#' extension of each other. The prime factor is the angle formed between
 #' each pair of lines (the flatter the better).
 #'
-#' @param tb_node  \code{tibble} containing info about the normalized heading, score and class of all lines
+#' @param tb_node  \code{tibble} containing info about the heading, score and class of all lines
 #' at a same junction.
 #'
 #' @return IDs (\code{character}) of the pair of lines having the best fit.
 #' @noRd
 find_best_connexion <- function(tb_node)
 {
-  comb_heading <- comb_class <- comb_score <- NULL
+  # Compute distance matrix between the end of each unitary vector formed by
+  # the (reverse) heading of each line. The idea is that if two lines are 180°
+  # apart, the distance between the two ends will be 2 but if they are only
+  # 60° apart, the distance will be 1. It curves the issue of adding and subtracting
+  # angle values constrained in a [-pi, pi] / [-180, 180] range.
+  mat_dist <- data.frame(X = cos((tb_node[["heading"]] + 180) * pi / 180),
+                         Y = sin((tb_node[["heading"]] + 180) * pi / 180)) |>
+    stats::dist() |>
+    as.matrix()
+  idx_max <- which.max(mat_dist)
 
-  m_row   <- utils::combn(seq(nrow(tb_node)), 2)
-  m_angle <- utils::combn(tb_node[["norm_heading"]], 2)
-  m_score <- utils::combn(tb_node[["SCORE"]], 2)
-  m_class <- utils::combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
+  # Give a chance to lines that have an angle close to "flattest" one to
+  # be considered "as flat". The flatness of the angle being the the prime
+  # driver of the selection, we want to avoid a CLASS 0 line taking
+  # precedence over a CLASS 1 line for a mere 5° difference
+  max_angle <- 7.5 * (pi / 180)  # Angle down to 7.5° less allowed
+  dist_angle <- sqrt((cos(max_angle) - 1)^2 + sin(max_angle)^2)
+  mat_dist[ mat_dist >= (mat_dist[idx_max] - dist_angle) ] <- 2
 
-  tb_similarity <- dplyr::tibble(
-    pairs        = seq(ncol(m_row)),
-    comb_heading = abs(abs(apply(m_angle, 2, diff)) - 90),
-    comb_class   = apply(m_class, 2, sum),
-    comb_score   = apply(m_score, 2, sum)) |>
-    dplyr::mutate(comb_heading = ifelse(comb_heading > 80, 80, comb_heading)) |>
-    dplyr::mutate(comb_class = ifelse(comb_class %in% c(1,2), comb_class, 3)) |>
+  # Update CLASS 0 to CLASS 5 in order to get a constant
+  # quality gradient from 1 to 5 for an easier sort
+  tb_node <- dplyr::mutate(tb_node, CLASS = ifelse(CLASS == 0, 5, CLASS))
+
+  # Build similarity table using all permutations
+  m_row   <- utils::combn(1:nrow(tb_node), 2)
+  tb_similarity <-
+    dplyr::tibble(
+      pairs        = 1:ncol(m_row),
+      comb_heading = apply(m_row, 2, function(x) mat_dist[x[1], x[2]] ),
+      comb_class   = apply(m_row, 2, function(x) sum(tb_node[["CLASS"]][x]) ),
+      comb_score   = apply(m_row, 2, function(x) sum(tb_node[["SCORE"]][x], na.rm = TRUE) )) |>
     dplyr::arrange(dplyr::desc(comb_heading), comb_class, dplyr::desc(comb_score))
 
   # The best fit is based on (in order):
