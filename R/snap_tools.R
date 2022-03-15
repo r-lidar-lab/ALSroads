@@ -489,24 +489,24 @@ find_best_connexion <- function(tb_node)
     if (a < 0) a <- 360 + a
     min(a, 360 - a)
   }
-  comb_heading <- apply(m_row, 2, function(x) min_diff_angle(tb_node[["heading"]][x[1]], tb_node[["heading"]][x[2]]))
+  comb_angle <- apply(m_row, 2, function(x) min_diff_angle(tb_node[["heading"]][x[1]], tb_node[["heading"]][x[2]]))
 
   # Give a chance to lines that have an angle close to "flattest" one to
   # be considered "as flat". The flatness of the angle being the the prime
   # driver of the selection, we want to avoid a CLASS 0 line taking
   # precedence over a CLASS 1 line for a mere 5° difference
   tolerance_angle <- 7.5  # Allow angle up to 7.5° more
-  idx_min <- which.min(comb_heading)[1]
-  comb_heading[comb_heading <= comb_heading[idx_min] + tolerance_angle] <- 0
+  idx_max <- which.max(comb_angle)[1]
+  comb_angle[comb_angle >= comb_angle[idx_max] - tolerance_angle] <- 180
 
   # Build similarity table using all permutations
   tb_similarity <-
     dplyr::tibble(
       pairs        = 1:ncol(m_row),
-      comb_heading = comb_heading,
+      comb_angle   = comb_angle,
       comb_class   = apply(m_row, 2, function(x) sum(tb_node[["CLASS"]][x]) ),
       comb_score   = apply(m_row, 2, function(x) sum(tb_node[["SCORE"]][x], na.rm = TRUE) )) |>
-    dplyr::arrange(comb_heading, comb_class, dplyr::desc(comb_score))
+    dplyr::arrange(dplyr::desc(comb_angle), comb_class, dplyr::desc(comb_score))
 
   # The best fit is based on (in order):
   #  - the angle formed between the segments (the flatter the better)
