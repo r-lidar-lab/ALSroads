@@ -18,9 +18,9 @@ st_ends_heading <- function(line)
     Ay = M[i-j,2]
     Bx = M[i,1]
     By = M[i,2]
-    unname(atan2(Ay-By, Ax-Bx))*180/pi
+    atan2(Ay-By, Ax-Bx)*180/pi
   })
-  
+  names(headings) <- c("head", "tail")
   return(headings)
 }
 
