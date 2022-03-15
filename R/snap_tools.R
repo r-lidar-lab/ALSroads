@@ -174,7 +174,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
                          sapply(ls_heading, utils::head, 1))
 
   tb_ends_ref <- rbind(tb_endpoint, tb_startpoint) |>
-    dplyr::mutate(norm_heading = ifelse(heading_tail_head < 0, heading_tail_head + 180, heading_tail_head))
+    dplyr::mutate(heading = heading_tail_head)
 
 
   # List of distinct connected nodes in the non-corrected/reference road dataset
@@ -414,7 +414,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
   if (nrow(df_pts_warn))
     pts_warn <- sf::st_as_sf(x = df_pts_warn, coords = c("X","Y"), crs = sf::st_crs(roads))
 
-  return(list(roads = roads, warnings = pts_warn))
+  return(list(roads = dplyr::select(roads, -UPDATABLE), warnings = pts_warn))
 }
 
 
@@ -463,32 +463,50 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 
 #' Find best connexion between two lines at a junction
 #'
-#' At a junction with multiples lines, find which two lines that are the most likely
-#' to be the extension of each other. The prime factor is the angle formed between
+#' At a junction with multiple lines, find which two lines are the most likely
+#' extension of each other. The prime factor is the angle formed between
 #' each pair of lines (the flatter the better).
 #'
-#' @param tb_node  \code{tibble} containing info about the normalized heading, score and class of all lines
+#' @param tb_node  \code{tibble} containing info about the heading, score and class of all lines
 #' at a same junction.
 #'
 #' @return IDs (\code{character}) of the pair of lines having the best fit.
 #' @noRd
 find_best_connexion <- function(tb_node)
 {
-  comb_heading <- comb_class <- comb_score <- NULL
+  # Update CLASS 0 to CLASS 5 in order to get a constant
+  # quality gradient from 1 to 5 for an easier sort
+  tb_node <- dplyr::mutate(tb_node, CLASS = ifelse(CLASS == 0, 5, CLASS))
 
-  m_row   <- utils::combn(seq(nrow(tb_node)), 2)
-  m_angle <- utils::combn(tb_node[["norm_heading"]], 2)
-  m_score <- utils::combn(tb_node[["SCORE"]], 2)
-  m_class <- utils::combn(ifelse(tb_node[["CLASS"]] %in% c(1,2), tb_node[["CLASS"]], 3), 2)
+  # Produce lines permutations (as row number)
+  m_row <- utils::combn(1:nrow(tb_node), 2)
 
-  tb_similarity <- dplyr::tibble(
-    pairs        = seq(ncol(m_row)),
-    comb_heading = abs(abs(apply(m_angle, 2, diff)) - 90),
-    comb_class   = apply(m_class, 2, sum),
-    comb_score   = apply(m_score, 2, sum)) |>
-    dplyr::mutate(comb_heading = ifelse(comb_heading > 80, 80, comb_heading)) |>
-    dplyr::mutate(comb_class = ifelse(comb_class %in% c(1,2), comb_class, 3)) |>
-    dplyr::arrange(dplyr::desc(comb_heading), comb_class, dplyr::desc(comb_score))
+  # Compute minimal angle difference between each lines
+  min_diff_angle <- function(x, y)
+  {
+    a <- x - y
+    if (a > 180) a <- 360 - a
+    if (a < 0) a <- 360 + a
+    min(a, 360 - a)
+  }
+  comb_angle <- apply(m_row, 2, function(x) min_diff_angle(tb_node[["heading"]][x[1]], tb_node[["heading"]][x[2]]))
+
+  # Give a chance to lines that have an angle close to "flattest" one to
+  # be considered "as flat". The flatness of the angle being the the prime
+  # driver of the selection, we want to avoid a CLASS 0 line taking
+  # precedence over a CLASS 1 line for a mere 5° difference
+  tolerance_angle <- 7.5  # Allow angle up to 7.5° more
+  idx_max <- which.max(comb_angle)[1]
+  comb_angle[comb_angle >= comb_angle[idx_max] - tolerance_angle] <- 180
+
+  # Build similarity table using all permutations
+  tb_similarity <-
+    dplyr::tibble(
+      pairs        = 1:ncol(m_row),
+      comb_angle   = comb_angle,
+      comb_class   = apply(m_row, 2, function(x) sum(tb_node[["CLASS"]][x]) ),
+      comb_score   = apply(m_row, 2, function(x) sum(tb_node[["SCORE"]][x], na.rm = TRUE) )) |>
+    dplyr::arrange(dplyr::desc(comb_angle), comb_class, dplyr::desc(comb_score))
 
   # The best fit is based on (in order):
   #  - the angle formed between the segments (the flatter the better)
