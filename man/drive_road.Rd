@@ -4,10 +4,19 @@
 \alias{drive_road}
 \title{Drive along an unknown road}
 \usage{
-drive_road(starting_road, conductivity, fov = 45, sightline = 10)
+drive_road(
+  seed,
+  conductivity,
+  existing_network = NULL,
+  fov = 85,
+  sightline = 50,
+  min_conductivity = 0.4,
+  ...,
+  disp = FALSE
+)
 }
 \arguments{
-\item{starting_road}{line (\code{sf} format)}
+\item{seed}{line (\code{sf} format)}
 
 \item{conductivity}{raster (\code{raster} format)}
 
@@ -32,7 +41,7 @@ conductivity <- system.file("extdata", "j53e_conductivity.tif", package = "ALSro
 starting <- system.file("extdata", "j53e_drived_road.gpkg", package = "ALSroads")
 
 conductivity <- raster(conductivity)
-starting <- st_read(starting, "starting_road", quiet = TRUE)
+starting <- st_read(starting, "seed", quiet = TRUE)
 
 res <- drive_road(starting, conductivity)
 

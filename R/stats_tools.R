@@ -35,6 +35,8 @@ deriv = function(x,y)
 #' @noRd
 activation <- function(x, th, mode = c("thresholds", "piecewise-linear"), asc = TRUE)
 {
+  o = x
+  x = x[]
   mode <- match.arg(mode)
   y <- numeric(length(x))
   start <- if (asc) 0 else 1
@@ -63,5 +65,17 @@ activation <- function(x, th, mode = c("thresholds", "piecewise-linear"), asc = 
     y[x >= th[length(th)]] <- 1-start
   }
 
-  return(round(y,3))
+  o[] <- round(y,3)
+  return(o)
+}
+
+activation2 <- function(r)
+{
+  u <- quantile(r[], probs = seq(0,1, length.out = 12), na.rm = TRUE)
+  y <- r
+  y[] <- findInterval(y[], u)
+  ymin = min(y[], na.rm = TRUE)
+  ymax = max(y[], na.rm = TRUE)
+  y <- 1-(y-ymin)/(ymax-ymin)
+  y
 }
