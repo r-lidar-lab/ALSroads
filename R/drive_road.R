@@ -310,14 +310,7 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       "driven at", speed, units::deparse_unit(speed),
       "\n")
 
-  if (dintersection > 8)
-  {
-    newline = seed
-    intersections = NULL
-    cat("Density of intersetions is too high (", round(dintersection,1), "intersection/km). The seed has been returned.\n")
-  }
-
-  return(list(road = newline, seeds = intersections))
+  return(list(road = newline, seeds = intersections, dintersection = dintersection))
 }
 
 
