@@ -31,17 +31,16 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
 {
   t0 <- Sys.time()
 
+  if (is(conductivity, "RasterLayer")) stop("conductivity must be a SpatRaster")
+
+  # Because we want an "overall" direction and we want to drop smooth little inperfections
   seed = sf::st_simplify(seed, dTolerance = 5)
 
   # Threshold of cost to stop the search.
   cost_max <- sightline * 1/min_conductivity
 
-  # Constant definition
-  # The idea is to only extract values that are mostly ahead of the line from a potentially very large VRT
-  buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
-
   # We need an orthonormal raster
-  resolution <- raster::res(conductivity)
+  resolution <- terra::res(conductivity)
   if (resolution[1] != resolution[2]) stop("'conductivity' raster must have the same resolution in both X and Y axis.", call. = FALSE)
   resolution <- resolution[1]
 
@@ -56,29 +55,14 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
   heading <- get_heading(start, end)
 
   sub_aoi_conductivity <- query_conductivity_aoi(conductivity, seed)
-  if (!raster::inMemory(sub_aoi_conductivity))
-    stop("Internal error: sub_aoi_conductivity is not loaded in memory")
 
-  resolution <- raster::res(sub_aoi_conductivity)[1]
   #plot(conductivity, col = viridis::inferno(50))
-  #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
-  #plot(seed, add = T, lwd = 3, col = "red")
+  #plot(terra::ext(sub_aoi_conductivity), col = "red", add = T)
+  #plot(seed, add = T, lwd = 3, col = "blue")
   #plot(sub_aoi_conductivity, col = viridis::inferno(50))
 
   # Mask the existing road to avoid driving a known road
-  if (!is.null(existing_network) && length(existing_network) > 0)
-  {
-    bb <- sf::st_bbox(sub_aoi_conductivity)
-    bb <- sf::st_set_crs(bb, sf::st_crs(existing_network))
-    mask <- sf::st_crop(existing_network, bb)
-    if (length(mask) > 0)
-    {
-      mask <- sf::st_buffer(mask, dist = 10)
-      #plot(mask, add = T, col = "red")
-      sub_aoi_conductivity <- raster::mask(sub_aoi_conductivity, sf::as_Spatial(mask), inverse = TRUE, updatevalue = 0)
-      #plot(sub_aoi_conductivity, col = viridis::inferno(50))
-    }
-  }
+  sub_aoi_conductivity <- mask_existing_network(sub_aoi_conductivity, existing_network)
 
   # Init view angles as a function of the resolution of the raster and the sightline
   angles_rad <- generate_angles(resolution, sightline, fov)
@@ -87,11 +71,11 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
   current_cost <- 0
   k <- 2
   overcost = 0
-  disp = F
+
   cat("Driving the conductivity raster\n")
   while (overcost <= 1 & !is.infinite(cost_max))
   {
-    if (k %% 2 == 0) cat("", (k-1)*sightline, " m\r", sep = "")
+    cat("", (k-1)*sightline, " m\r", sep = "")
     flush.console()
 
     # Compute heading from the two previous points
@@ -104,67 +88,39 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
     ends <- generate_ends(p2, angles_rad, sightline, heading)
     ends$angle = angles_rad
 
-    # Generate a very small area of interest to analyse
-    search_zone <- sf::st_bbox(c(start, sf::st_geometry(ends))) + c(-1,-1,1,1)*resolution
-    aoi <- raster::crop(sub_aoi_conductivity, search_zone)
-    #aoi <- terra::crop(sub_aoi_conductivity, terra::ext(c(search_zone[1], search_zone[3],search_zone[2],search_zone[4]))) # -10 ms
-
-    pol <- c(start, ends$geometry, start)
-    pol <- sf::st_coordinates(pol)
-    pol <- sf::st_polygon(list(pol))
-    pol <- sf::st_sfc(pol)
-    pol <- sf::st_buffer(pol, resolution)
-    #aoi <- raster::mask(aoi, sf::as_Spatial(pol))
-    #plot(sf::st_as_sfc(search_zone))
-    #plot(aoi, col = viridis::viridis(50), add = T)
-    #plot(start, add = T, pch = 19, col = "red")
-    #plot(ends, pch = 19, add = T, col = "red")
-    #plot(pol, add = T, border = "green")
+    # Generate a very small area of interest corresponding to what can be seen
+    search_zone <- sf::st_bbox(c(start, sf::st_geometry(ends)))
+    search_zone <- terra::ext(c(search_zone[1], search_zone[3],search_zone[2],search_zone[4])) + resolution
+    aoi <- terra::crop(sub_aoi_conductivity, search_zone)
+    #plot(aoi, col = viridis::inferno(50))
+    #plot(start,add =T, col = "red", pch = 19)
+    #plot(ends$geometry,add =T, col = "red", pch = 19)
 
     # Compute the transition matrix for this AOI
     trans <- transition(aoi, geocorrection = TRUE)
-    #trans <- transition(raster::raster(aoi), geocorrection = TRUE) # + 20 ms
 
-    # Check if some ends fall outside of the AOI conductivity raster
-    # If any reload another raster part further ahead.
-    val <- raster::extract(aoi, ends)
-    #terra:::extract(aoi, st_coordinets(ends)) # - 2 ms
-
+    # Check if some ends fall outside of the AOI
+    # If any we likely reached the loaded part of the conductivity.
+    # Reload another raster part further ahead.
+    val <- terra::extract(aoi, sf::st_coordinates(ends))[[1]]
     if (any(is.na(val)))
     {
       #cat("\nReaching bounds of AOI. Loading next AOI\n")
 
       # Make a newly sub aoi conductivity raster further ahead
-      line <- sf::st_cast(c(p1, p2), "LINESTRING")
-      new_aoi_poly <- line |>
-        st_extend_line(c(buf_dist["ahead"], buf_dist["behind"])) |>
-        sf::st_buffer(buf_dist["side"], endCapStyle = "FLAT") |>
-        sf::st_sfc() |>
-        sf::st_set_crs(sf::st_crs(seed))
+      line <- sf::st_cast(c(p1, p2), "LINESTRING") |> sf::st_sfc()
+      line <- sf::st_set_crs(line, sf::st_crs(seed))
 
-      sub_aoi_conductivity <- query_conductivity_aoi(conductivity, new_aoi_poly)
+      sub_aoi_conductivity <- query_conductivity_aoi(conductivity, line)
       #plot(conductivity, col = viridis::inferno(50))
       #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
       #plot(seed, add = T, lwd = 3, col = "red")
 
-      if (!is.null(existing_network) && length(existing_network) > 0)
-      {
-        bb <- sf::st_bbox(sub_aoi_conductivity)
-        bb <- sf::st_set_crs(bb, sf::st_crs(existing_network))
-        mask <- sf::st_crop(existing_network, bb)
-
-        if (length(mask) > 0)
-        {
-          mask <- sf::st_buffer(mask, dist = 10)
-          #plot(mask, add = T, col = "red")
-          sub_aoi_conductivity <- raster::mask(sub_aoi_conductivity, sf::as_Spatial(mask), inverse = TRUE, updatevalue = 0)
-          #plot(sub_aoi_conductivity, col = viridis::inferno(50))
-        }
-      }
+      sub_aoi_conductivity <- mask_existing_network(sub_aoi_conductivity, existing_network)
 
       # Check again if some ends fall outside of the newly cropped conductivity raster
       # If yes we are close to the edge of the raster. Try again with half the sightline
-      val <- raster::extract(sub_aoi_conductivity, ends)
+      val <- terra::extract(sub_aoi_conductivity, sf::st_coordinates(ends))[[1]]
       if (any(is.na(val)))
       {
         tmp_angles_rad <- generate_angles(resolution, sightline/2, fov)
@@ -173,7 +129,7 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       }
 
       # If we still have NA we reached the border of the conductivity map
-      val <- raster::extract(sub_aoi_conductivity, ends)
+      val <- terra::extract(sub_aoi_conductivity, sf::st_coordinates(ends))[[1]]
       if (any(is.na(val)))
       {
         warning("Drive stopped early. Edge of conductivity raster has been reached.", call. = FALSE)
@@ -181,13 +137,15 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       }
 
       # Re-extract the AOI and recompute the transition
-      aoi <- raster::crop(sub_aoi_conductivity, search_zone)
+      aoi <- terra::crop(sub_aoi_conductivity, search_zone)
       trans <- transition(aoi, geocorrection = TRUE)
     }
 
-    # Find cost of each edge point
+    # Find cost to reach each end point
     if (!is.infinite(cost_max))
     {
+      # Estimates the cost to reach each ends point and returns the main direction and
+      # other possible directions (i.e. intersections)
       ans <- find_reachable(start, ends, trans, cost_max)
       if (is.null(ans))
       {
@@ -200,23 +158,23 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       cost <- ans$cost
       current_cost <- cost[idx_main]
 
-      ends_other <- ends[idx_other,]
-      cost_other <- cost[idx_other]
-      ends_other <- ends_other[cost_other < current_cost*1.3,]
-
-
       end <- ends[idx_main,]
 
-      W <- sf::st_geometry(end)[[1]]
-      L <- gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(end), output = "SpatialLines") |> suppressWarnings()
+      relative_angles <- abs(ends$angle[idx_main] - ends$angle[idx_other])*180/pi
+      ends_other <- ends[idx_other,]
+      cost_other <- cost[idx_other]
+      ends_other <- ends_other[cost_other < current_cost*1.3 & relative_angles > 20,]
+
+      L <- gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(end), output = "SpatialLines")
       L <- sf::st_geometry(sf::st_as_sf(L))
-      list_coords[[k+1]] <- W
+      list_coords[[k+1]] <- sf::st_geometry(end)[[1]]
       list_lines[[k]] <- L[[1]]
 
       # Protect against infinite loops
-      mask <- sf::st_buffer(L, dist = 5, endCapStyle = "FLAT")
-      sub_aoi_conductivity <- raster::mask(sub_aoi_conductivity, sf::as_Spatial(mask), inverse = TRUE, updatevalue = 0)
-      #sub_aoi_conductivity <- terra::mask(sub_aoi_conductivity, terra::vect(mask), inverse = TRUE, updatevalue = 0) # -20 ms
+      #mask <- sf::st_buffer(L, dist = 5, endCapStyle = "FLAT")
+      #mask <- sf::st_set_crs(mask, sf::st_crs(seed))
+      #sub_aoi_conductivity <- terra::mask(sub_aoi_conductivity, terra::vect(mask), inverse = TRUE, updatevalue = 0)
+      #plot(sub_aoi_conductivity, col = viridis::inferno(50))
 
       if (current_cost > cost_max)
         overcost = overcost + 1
@@ -224,37 +182,34 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
         overcost = 0
 
       I <- NULL
-      if (length(sf::st_geometry(ends_other)) > 0)
+      if (length(sf::st_geometry(ends_other)) > 0 & length(sf::st_geometry(ends_other)) < 3)
       {
         I <- gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(ends_other), output = "SpatialLines") |> suppressWarnings()
         I <- sf::st_geometry(sf::st_as_sf(I))
         I <- sf::st_difference(I,L)
-        for(II in I) list_intersections <- c(list_intersections, list(II))
+        for(II in I)
+        {
+          if (sf::st_geometry_type(II) == "LINESTRING")
+            list_intersections <- c(list_intersections, list(II))
+        }
       }
 
-      # >>>>>>>>>>>>>>>>>>>
-      rot = function(a) matrix(c(cos(a), sin(a), -sin(a), cos(a)), 2, 2)
-      cntrd = rbind(sf::st_coordinates(start), sf::st_coordinates(end))
-      cntrd = c(mean(cntrd[,1]), mean(cntrd[,2]))
-      #cntrd = sf::st_point(cntrd) |> sf::st_sfc()
-
-      M = sf::st_coordinates(start)
-      M = rotate_pi(M, cntrd)
-      start2 = sf::st_point(M) |> sf::st_sfc()
-
-      M = sf::st_coordinates(ends)
-      M = rotate_pi(M, cntrd)
-      ends2 = M %>% as.data.frame %>% sf::st_as_sf(coords = c(1,2))
-      ends2$angle = ends$angle
+      # Look backward because we can missed intersection otherwise
+      start2 <- sf::st_geometry(end)[[1]]
+      heading <- get_heading(start2, start)
+      ends2 <- generate_ends(start2, angles_rad, sightline, heading)
+      ends2 <- sf::st_as_sf(ends2)
+      ends2$angle = angles_rad
       ends2 <- ends2[abs(ends2$angle) > 15*pi/180,]
-      tmp <- raster::extract(aoi, sf::st_coordinates(ends2))
+      tmp <- terra::extract(aoi, sf::st_coordinates(ends2))[[1]]
       ends2 <- ends2[!is.na(tmp),]
-
-      #plot(aoi, col = viridis::inferno(50))
-      #plot(start, add = TRUE, pch = 19)
-      #plot(ends, col = 'red', add = TRUE, pch = 19)
-      #plot(start2, add = TRUE, pch = 19, col = "black")
-      #plot(ends2, col = 'red', add = TRUE, pch = 19)
+      # plot(aoi, col = viridis::inferno(50))
+      # plot(start, add = TRUE, pch = 19)
+      # plot(ends$geom, col = 'red', add = TRUE, pch = 19)
+      # plot(end, col = 'green', add = TRUE, pch = 19)
+      # plot(sfcntrd, col = 'red', pch = 19, add = T)
+      # plot(start2, add = TRUE, pch = 19, col = "pink")
+      # plot(ends2, col = 'red', add = TRUE, pch = 19)
 
       ans2 = find_reachable(start2, ends2, trans, cost_max)
       I2 <- NULL
@@ -270,13 +225,17 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
         #plot(cost)
         #plot(ends2, add =T, pch = 19, col = "green")
 
-        if (length(sf::st_geometry(ends2)) > 0)
+        if (length(sf::st_geometry(ends2)) > 0 & length(sf::st_geometry(ends2)) < 3)
         {
           I2 <- gdistance::shortestPath(trans, sf::st_coordinates(start2), sf::st_coordinates(ends2), output = "SpatialLines") |> suppressWarnings()
           I2 <- sf::st_geometry(sf::st_as_sf(I2))
           I2 <- sf::st_difference(I2,L)
           I2 <- I2[as.numeric(sf::st_length(I2)) > 0.5 * sightline]
-          for(II in I2) list_intersections <- c(list_intersections, list(II))
+          for(II in I2)
+          {
+            if (sf::st_geometry_type(II) == "LINESTRING")
+              list_intersections <- c(list_intersections, list(II))
+          }
         }
       }
       k <- k + 1
@@ -285,27 +244,26 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       {
         if (length(angles_rad) == length(cost))
         {
-          plot(angles_rad, cost, type = "b")
-          lines(angles_rad, ma(cost, n = 5), type = "b", col = "red")
-          abline(v = angles_rad[c(idx_main, idx_other)])
-          abline(h = cost_max)
+           plot(angles_rad, cost, type = "b", ylim = c(0, max(cost) *1.1))
+           lines(angles_rad, spike_preserving_smooth(cost, n = 5), type = "b", col = "red")
+           abline(v = angles_rad[c(idx_main, idx_other)])
+           abline(h = cost_max)
         }
-        raster::plot(raster::crop(sub_aoi_conductivity, raster::extent(ends) + 100), col = viridis::inferno(50))
+        terra::plot(terra::crop(sub_aoi_conductivity, terra::ext(aoi) + 100), col = viridis::inferno(50))
         ends$cost = cost
         tryCatch({
           plot(ends["cost"], pal = viridis::viridis, pch = 19, add = T, breaks = "quantile")
         }, error = function(x) {
           plot(ends$geometry, col = "red", add = T, pch = 19, cex = 0.5)
         })
-        path = gdistance::shortestPath(trans, sf::as_Spatial(start), sf::as_Spatial(ends), output = "SpatialLines") |> suppressWarnings()
-
+        paths = gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(ends), output = "SpatialLines")
         plot(p1, col = "red", pch = 19, add = T)
         plot(p2, col = "red", pch = 19, add = T)
-        sp::plot(path, add = T, col = "red")
+        sp::plot(paths, add = T, col = "red")
         plot(L, add = T, col = "red", lwd = 3)
         if(!is.null(I)) plot(I, add = T, col = "blue", lwd = 3)
         if(!is.null(I2)) plot(I2, add = T, col = "cornflowerblue", lwd = 3)
-        plot(sf::st_sfc(W), add = T, col = "green", pch = 19, cex = 2)
+        plot(end, add = T, col = "green", pch = 19, cex = 2)
         print(current_cost)
       }
     }
@@ -317,19 +275,26 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
     sf::st_coordinates() |>
     sf::st_linestring() |>
     sf::st_sfc() |>
-    sf::st_set_crs(sf::st_crs(seed)) |>
-    sf::st_simplify(dTolerance = 2)
+    sf::st_set_crs(sf::st_crs(seed))
 
   if (length(list_intersections) > 1)
   {
     intersections <- sf::st_sfc(list_intersections) |>
-    sf::st_set_crs(sf::st_crs(seed)) |>
-    sf::st_simplify(dTolerance = 2)
+      sf::st_set_crs(sf::st_crs(seed))
+
+    p = lwgeom::st_startpoint(intersections)
+    d = as.numeric(sf::st_distance(p,newline))
+    intersections <- intersections[d < 1]
   }
   else
   {
     intersections <- NULL
   }
+
+
+  nintersection <- length(intersections)
+  len = as.numeric(sf::st_length(newline))
+  dintersection = nintersection/(len/1000)
 
   tf <- Sys.time()
   dt <- tf-t0
@@ -344,6 +309,13 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       ": road of", dist, units::deparse_unit(dist),
       "driven at", speed, units::deparse_unit(speed),
       "\n")
+
+  if (dintersection > 8)
+  {
+    newline = seed
+    intersections = NULL
+    cat("Density of intersetions is too high (", round(dintersection,1), "intersection/km). The seed has been returned.\n")
+  }
 
   return(list(road = newline, seeds = intersections))
 }
@@ -388,7 +360,7 @@ get_heading <- function(from, to)
 
 query_conductivity_aoi <- function(conductivity, seed)
 {
-  resolution <- raster::res(conductivity)[1]
+  resolution <- terra::res(conductivity)[1]
 
   buf_dist <- c("ahead" = 900, "behind" = 100, "side" = 400)  # Could be set as a parameter
 
@@ -398,21 +370,11 @@ query_conductivity_aoi <- function(conductivity, seed)
   #plot(aoi, add = T, col= "red")
   #plot(seed, add = T, lwd = 3)
 
-  conductivity_crop <- raster::crop(conductivity, sf::as_Spatial(aoi))
+  conductivity_crop <- terra::crop(conductivity, terra::vect(aoi))
   #plot(conductivity_crop, col = viridis::viridis(50))
   #plot(seed, add = T, lwd = 3, col = "red")
 
-  resolution_min <- 2  # Could be set as a parameter
-  if (resolution < resolution_min)
-  {
-    agg_factor <- ceiling(resolution_min / resolution)
-    resolution <- resolution * agg_factor
-    cat("Downsampling conductivity to", resolution, "m\n")
-    conductivity_crop <- raster::aggregate(conductivity_crop, fact = agg_factor, fun = mean, na.rm = TRUE)
-  }
-
   conductivity_crop[is.na(conductivity_crop)] <- 0
-
   return(conductivity_crop)
 }
 
@@ -529,7 +491,7 @@ find_reachable <- function(start, ends, trans, cost_max)
 
   # Select local minima of cost
   smooth <- 5
-  minima <- local_maxima_with_height(-ma(cost, n = smooth))
+  minima <- local_maxima_with_height(-spike_preserving_smooth(cost, n = smooth))
   if (sum(minima$depth > 4) > 0) {
     minima <- minima[minima$depth > 4,]
     minima <- minima$idx + as.integer(smooth/2)
@@ -556,11 +518,36 @@ find_reachable <- function(start, ends, trans, cost_max)
 
 rotate_pi <- function(X, C)
 {
-  M = matrix(c(-1,0,0,1), 2,2)
-  X[,1] = X[,1] - C[1]
-  X[,2] = X[,2] - C[2]
-  X = X %*% M
-  X[,1] = X[,1] + C[1]
-  X[,2] = X[,2] + C[2]
+  X[,1] = -(X[,1] - C[1]) + C[1]
+  X[,2] = -(X[,2] - C[2]) + C[2]
   X
+}
+
+mask_existing_network <- function(x, existing_network)
+{
+  if (!is.null(existing_network) && length(existing_network) > 0)
+  {
+    bb <- sf::st_bbox(x)
+    bb <- sf::st_set_crs(bb, sf::st_crs(existing_network))
+    mask <- sf::st_crop(existing_network, bb)
+    if (length(mask) > 0)
+    {
+      mask <- sf::st_buffer(mask, dist = 10)
+      x <- terra::mask(x, terra::vect(mask), inverse = TRUE, updatevalue = 0)
+    }
+  }
+
+  return(x)
+}
+
+spike_preserving_smooth <- function(x, n = 5)
+{
+  y = ma(x, n)
+  dp <- abs(x-y)
+  th = quantile(dp, probs = 0.90, na.rm = T)
+  dp[is.na(dp)] = 0
+  y[dp > th] = x[dp > th]
+  #plot(x, type = "b", ylim = c(0, max(x) *1.1))
+  #points(y, type = "b", col = "red")
+  y
 }
