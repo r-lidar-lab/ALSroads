@@ -18,9 +18,9 @@ st_ends_heading <- function(line)
     Ay = M[i-j,2]
     Bx = M[i,1]
     By = M[i,2]
-    unname(atan2(Ay-By, Ax-Bx))*180/pi
+    atan2(Ay-By, Ax-Bx)*180/pi
   })
-  
+  names(headings) <- c("head", "tail")
   return(headings)
 }
 
@@ -62,10 +62,10 @@ st_extend_line <- function(line, distance, end = "BOTH")
 #' Get point from distance on a line
 #'
 #' This is essentially the reverse of rgeos::gProject(). It must be noted
-#' that due floating point precision issue, the point returned won't be
+#' that due floating point precision limitation, the point returned won't be
 #' exactly on the line and thus won't split it.
 #'
-#' @param distance  distance on the \code{line} at which the coordinates will be retreived.
+#' @param distance  distance on the \code{line} at which the coordinates will be retrieved.
 #' @param line  line (\code{sfc} format)
 #' @param from_end  logical; (\code{FALSE} by default); if \code{TRUE} start measuring from the end
 #' of \code{line} instead of from the beginning.
