@@ -252,6 +252,40 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     }
 
 
+    # If the node contains a loop, special handling is needed
+    tb_pos <- table(tb_node[["pos"]])
+    if (any(tb_pos > 1))
+    {
+      if (length(tb_pos) == 2)
+      {
+        # Update geometry in the case of one loop and one normal road
+        for (j in 1:3)
+        {
+          pos <- tb_node[j,][["pos"]]
+          n <- ifelse(tb_node[j,][["end"]], nrow(sf::st_coordinates(roads[pos,])), 1)
+          sf::st_geometry(roads[pos,])[[1]][n, 1] <- mean(tb_node_bridge[["X"]])
+          sf::st_geometry(roads[pos,])[[1]][n, 2] <- mean(tb_node_bridge[["Y"]])
+        }
+      }
+      else
+      {
+        # Raise warning and skip in the case of one or more loops and one or more normal road
+        # Could be adressed but this case will be so rare that I don't think
+        # it justifies the complexity that would need to be added to the rest of the script
+        # One way of doing it would be to split each loop before searching for the best
+        # junction point and then only at the end recombining each loop.
+        pos <- as.numeric(names(tb_pos))
+        IDs_node <- roads[pos,][[field]]
+        IDs_glued <- glue::glue_collapse(IDs_node, ", ")
+        
+        warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction contains one loop and at least two other roads."), call.=FALSE)
+        df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction contains one loop and at least 2 other roads", IDs = IDs_glued) |>
+          rbind(df_pts_warn)
+      }
+      next
+    }
+
+
     # Merge the two segments forming the bridge.
     # This will allow for an easier split when the
     # exact position of the junction will be found.
