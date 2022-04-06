@@ -228,8 +228,8 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
       IDs_node <- roads[pos,][[field]]
       IDs_glued <- glue::glue_collapse(IDs_node, ", ")
 
-      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
-      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceed tolerance", IDs = IDs_glued) |>
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
       next
     }
@@ -283,9 +283,10 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # Make sure all intersections occur within the tolerance
     # value of the mean junction otherwise skip snapping
     # this node and throw warning
+    dist_junction_bridge <- rgeos::gProject(sf::as_Spatial(bridge[["bridge"]]), sf::as_Spatial(bridge[["junction"]]))
+
     no_intersection <- sapply(dist_bridge, is.na)
-    dist_junction_mean <- mean(dist_bridge, na.rm = TRUE)
-    dist_junction_diff <- abs(dist_bridge - dist_junction_mean)
+    dist_junction_diff <- abs(dist_bridge - dist_junction_bridge)
     dist_junction_diff[no_intersection] <- Inf
     dist_max <- max(dist_junction_diff)
 
@@ -295,8 +296,8 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
       IDs_node <- roads[pos,][[field]]
       IDs_glued <- glue::glue_collapse(IDs_node, ", ")
 
-      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
-      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceed tolerance", IDs = IDs_glued) |>
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
       next
     }
@@ -305,7 +306,24 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # all remaining segments intersect the bridge
     # based on the mean intersection distance
     # along the bridge from its begining
+    dist_junction_mean <- mean(dist_bridge)
     mean_junction <- st_point_on_line(dist_junction_mean, bridge[["bridge"]])
+
+    # Make sure that the mean intersection point doesn't
+    # occur at the end of the bridge. Really rare, but
+    # can happen in case of a short by-pass road misplaced
+    # but already connected at one end of the bridge
+    if (dist_junction_mean == 0)
+    {
+      pos <- tb_node[["pos"]]
+      IDs_node <- roads[pos,][[field]]
+      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
+      
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction weirdly occurs at exactly one end of a road."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction weirdly occurs at exactly one end of a road", IDs = IDs_glued) |>
+        rbind(df_pts_warn)
+      next
+    }
 
     # Split bridge geometry to recreate the original
     # two segments composing it and get coordinates
@@ -455,9 +473,9 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 
   dist_intersect <- sapply(seq_along(sp_intersect), function(k) rgeos::gProject(sp_line, sp_intersect[k]))
   dist_point <- rgeos::gProject(sp_line, sf::as_Spatial(reference_point))
-  dist_intersect_min <- dist_intersect[which.min(abs(dist_intersect - dist_point))]
+  dist_intersect_closest <- dist_intersect[which.min(abs(dist_intersect - dist_point))]
 
-  return(dist_intersect_min)
+  return(dist_intersect_closest)
 }
 
 
