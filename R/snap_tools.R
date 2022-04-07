@@ -201,6 +201,11 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     tb_node_ref <- dplyr::filter(tb_ends_ref, id %in% IDs)
     tb_node_cor <- dplyr::filter(tb_ends_roads, id %in% IDs)
 
+    # Prepare IDs string for potential warning message
+    pos <- unique(tb_node[["pos"]])
+    IDs_node <- roads[pos,][[field]]
+    IDs_glued <- glue::glue_collapse(IDs_node, ", ")
+
 
     # Will only try snapping if at least one of the segments
     # in the group has been corrected as they will already
@@ -224,12 +229,8 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     gap <- sqrt(diff(tb_node_bridge[["X"]])^2 + diff(tb_node_bridge[["Y"]])^2)
     if (gap/2 > tolerance)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-
-      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
-      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceed tolerance", IDs = IDs_glued) |>
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
       next
     }
@@ -247,6 +248,36 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
         n <- ifelse(tb_node_bridge[j,][["end"]], nrow(sf::st_coordinates(roads[pos,])), 1)
         sf::st_geometry(roads[pos,])[[1]][n, 1] <- mean(tb_node_bridge[["X"]])
         sf::st_geometry(roads[pos,])[[1]][n, 2] <- mean(tb_node_bridge[["Y"]])
+      }
+      next
+    }
+
+
+    # If the node contains a loop, special handling is needed
+    tb_pos <- table(tb_node[["pos"]])
+    if (any(tb_pos > 1))
+    {
+      if (length(tb_pos) == 2)
+      {
+        # Update geometry in the case of one loop and one normal road
+        for (j in 1:3)
+        {
+          pos <- tb_node[j,][["pos"]]
+          n <- ifelse(tb_node[j,][["end"]], nrow(sf::st_coordinates(roads[pos,])), 1)
+          sf::st_geometry(roads[pos,])[[1]][n, 1] <- mean(tb_node_bridge[["X"]])
+          sf::st_geometry(roads[pos,])[[1]][n, 2] <- mean(tb_node_bridge[["Y"]])
+        }
+      }
+      else
+      {
+        # Raise warning and skip in the case of one or more loops and one or more normal road
+        # Could be adressed but this case will be so rare that I don't think
+        # it justifies the complexity that would need to be added to the rest of the script
+        # One way of doing it would be to split each loop before searching for the best
+        # junction point and then only at the end recombining each loop.
+        warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction contains one loop and at least two other roads."), call.=FALSE)
+        df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction contains one loop and at least two other roads", IDs = IDs_glued) |>
+          rbind(df_pts_warn)
       }
       next
     }
@@ -283,20 +314,17 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # Make sure all intersections occur within the tolerance
     # value of the mean junction otherwise skip snapping
     # this node and throw warning
+    dist_junction_bridge <- rgeos::gProject(sf::as_Spatial(bridge[["bridge"]]), sf::as_Spatial(bridge[["junction"]]))
+
     no_intersection <- sapply(dist_bridge, is.na)
-    dist_junction_mean <- mean(dist_bridge, na.rm = TRUE)
-    dist_junction_diff <- abs(dist_bridge - dist_junction_mean)
+    dist_junction_diff <- abs(dist_bridge - dist_junction_bridge)
     dist_junction_diff[no_intersection] <- Inf
     dist_max <- max(dist_junction_diff)
 
     if (dist_max > tolerance)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-
-      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceed tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
-      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceed tolerance", IDs = IDs_glued) |>
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
       next
     }
@@ -305,12 +333,34 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # all remaining segments intersect the bridge
     # based on the mean intersection distance
     # along the bridge from its begining
+    dist_junction_mean <- mean(dist_bridge)
     mean_junction <- st_point_on_line(dist_junction_mean, bridge[["bridge"]])
+
+    # Make sure that the mean intersection point doesn't
+    # occur at the end of the bridge. Really rare, but
+    # can happen in case of a short by-pass road misplaced
+    # but already connected at one end of the bridge
+    if (dist_junction_mean == 0)
+    {
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction weirdly occurs at exactly one end of a road."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction weirdly occurs at exactly one end of a road", IDs = IDs_glued) |>
+        rbind(df_pts_warn)
+      next
+    }
 
     # Split bridge geometry to recreate the original
     # two segments composing it and get coordinates
     # of the final junction point
     bridge_geometries <- st_split_at_point(mean_junction, bridge[["bridge"]])
+
+    if (length(bridge_geometries) != 2)
+    {
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; issue occured during a splitting operation."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Issue occured during a splitting operation", IDs = IDs_glued) |>
+        rbind(df_pts_warn)
+      next
+    }
+
     coords_junction <- sf::st_coordinates(bridge_geometries[2])[1,-3]
 
     # Reorder vertices in order to match the original
@@ -366,11 +416,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
       if (length(road_split) == 1)
       {
         ID_problem <- roads[pos,][[field]]
-        
-        pos <- tb_node[["pos"]]
-        IDs_node <- roads[pos,][[field]]
-        IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-        
         warning(glue::glue("Impossible to connect road with '{field}' {ID_problem} inside node of {IDs_glued}; the road doesn't intersect other roads but weirdly is still very close."), call.=FALSE)
         df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Road doesn't seem to intersect with others inside node", IDs = ID_problem) |>
           rbind(df_pts_warn)
@@ -455,9 +500,9 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 
   dist_intersect <- sapply(seq_along(sp_intersect), function(k) rgeos::gProject(sp_line, sp_intersect[k]))
   dist_point <- rgeos::gProject(sp_line, sf::as_Spatial(reference_point))
-  dist_intersect_min <- dist_intersect[which.min(abs(dist_intersect - dist_point))]
+  dist_intersect_closest <- dist_intersect[which.min(abs(dist_intersect - dist_point))]
 
-  return(dist_intersect_min)
+  return(dist_intersect_closest)
 }
 
 
