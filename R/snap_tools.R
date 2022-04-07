@@ -201,6 +201,11 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     tb_node_ref <- dplyr::filter(tb_ends_ref, id %in% IDs)
     tb_node_cor <- dplyr::filter(tb_ends_roads, id %in% IDs)
 
+    # Prepare IDs string for potential warning message
+    pos <- unique(tb_node[["pos"]])
+    IDs_node <- roads[pos,][[field]]
+    IDs_glued <- glue::glue_collapse(IDs_node, ", ")
+
 
     # Will only try snapping if at least one of the segments
     # in the group has been corrected as they will already
@@ -224,10 +229,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     gap <- sqrt(diff(tb_node_bridge[["X"]])^2 + diff(tb_node_bridge[["Y"]])^2)
     if (gap/2 > tolerance)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-
       warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(gap/2,1)} > {tolerance} {dist_unit})."), call.=FALSE)
       df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
@@ -274,12 +275,8 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
         # it justifies the complexity that would need to be added to the rest of the script
         # One way of doing it would be to split each loop before searching for the best
         # junction point and then only at the end recombining each loop.
-        pos <- as.numeric(names(tb_pos))
-        IDs_node <- roads[pos,][[field]]
-        IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-        
         warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction contains one loop and at least two other roads."), call.=FALSE)
-        df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction contains one loop and at least 2 other roads", IDs = IDs_glued) |>
+        df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction contains one loop and at least two other roads", IDs = IDs_glued) |>
           rbind(df_pts_warn)
       }
       next
@@ -326,10 +323,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
 
     if (dist_max > tolerance)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-
       warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; distance from expected junction exceeds tolerance ({round(dist_max,1)} > {tolerance} {dist_unit})."), call.=FALSE)
       df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Distance from expected junction exceeds tolerance", IDs = IDs_glued) |>
         rbind(df_pts_warn)
@@ -349,10 +342,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # but already connected at one end of the bridge
     if (dist_junction_mean == 0)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-      
       warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; junction weirdly occurs at exactly one end of a road."), call.=FALSE)
       df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Junction weirdly occurs at exactly one end of a road", IDs = IDs_glued) |>
         rbind(df_pts_warn)
@@ -366,10 +355,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
 
     if (length(bridge_geometries) != 2)
     {
-      pos <- tb_node[["pos"]]
-      IDs_node <- roads[pos,][[field]]
-      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-      
       warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; issue occured during a splitting operation."), call.=FALSE)
       df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Issue occured during a splitting operation", IDs = IDs_glued) |>
         rbind(df_pts_warn)
@@ -431,11 +416,6 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
       if (length(road_split) == 1)
       {
         ID_problem <- roads[pos,][[field]]
-        
-        pos <- tb_node[["pos"]]
-        IDs_node <- roads[pos,][[field]]
-        IDs_glued <- glue::glue_collapse(IDs_node, ", ")
-        
         warning(glue::glue("Impossible to connect road with '{field}' {ID_problem} inside node of {IDs_glued}; the road doesn't intersect other roads but weirdly is still very close."), call.=FALSE)
         df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Road doesn't seem to intersect with others inside node", IDs = ID_problem) |>
           rbind(df_pts_warn)
