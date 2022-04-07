@@ -127,13 +127,17 @@ st_split_at_point <- function(split_point, line, tolerance = 0.01)
   if (as.numeric(sf::st_length(blade)) > tolerance) stop("'split_point' too far from 'line' to perform split")
 
   # Sharpen blade (by slightly extending it)!
+  # Not ideal as this blade extention could cause the line
+  # to be splitted at more than one place. I can also reach
+  # the precision limit of Float64 representation for the
+  # coordinates
   coords <- sf::st_coordinates(blade)
   theta <- atan2(diff(coords[,2]), diff(coords[,1]))
 
-  xmax <- max(coords[,"X"]) + abs(0.01 * cos(theta))
-  ymax <- max(coords[,"Y"]) + abs(0.01 * sin(theta))
-  xmin <- min(coords[,"X"]) - abs(0.01 * cos(theta))
-  ymin <- min(coords[,"Y"]) - abs(0.01 * sin(theta))
+  xmax <- max(coords[,"X"]) + abs(0.0001 * cos(theta))
+  ymax <- max(coords[,"Y"]) + abs(0.0001 * sin(theta))
+  xmin <- min(coords[,"X"]) - abs(0.0001 * cos(theta))
+  ymin <- min(coords[,"Y"]) - abs(0.0001 * sin(theta))
   
   # Split line and extract the two parts
   split_line <- rbind(c(xmax, ymax), c(xmin, ymin)) |>

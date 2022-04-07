@@ -363,6 +363,19 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # two segments composing it and get coordinates
     # of the final junction point
     bridge_geometries <- st_split_at_point(mean_junction, bridge[["bridge"]])
+
+    if (length(bridge_geometries) != 2)
+    {
+      pos <- tb_node[["pos"]]
+      IDs_node <- roads[pos,][[field]]
+      IDs_glued <- glue::glue_collapse(IDs_node, ", ")
+      
+      warning(glue::glue("Impossible to connect together roads with '{field}' {IDs_glued}; issue occured during a splitting operation."), call.=FALSE)
+      df_pts_warn <- data.frame(tb_node_ref[1, c("X","Y")], message = "Issue occured during a splitting operation", IDs = IDs_glued) |>
+        rbind(df_pts_warn)
+      next
+    }
+
     coords_junction <- sf::st_coordinates(bridge_geometries[2])[1,-3]
 
     # Reorder vertices in order to match the original
