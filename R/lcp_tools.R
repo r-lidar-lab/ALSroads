@@ -147,6 +147,7 @@ mask_conductivity <- function(conductivity, centerline, param)
   conductivity[res] <- 1
   res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
   conductivity[res] <- 0
+  conductivity[is.nan(conductivity)] <- NA
 
   if (getOption("ALSroads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
   verbose("   - Add full conductivity end blocks\n")
@@ -220,8 +221,9 @@ transition <- function(conductivity, directions = 8, geocorrection = TRUE)
 
   dataVals <- cbind(val[adj[,1]], val[adj[,2]])
   transition.values <- rowMeans(dataVals)
+  transition.values[is.na(transition.values)] <- 0
 
-  if(!all(transition.values>=0))
+  if(!all(transition.values >= 0))
     warning("transition function gives negative values")
 
   transitionMatr[adj] <- as.vector(transition.values)
