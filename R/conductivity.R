@@ -44,16 +44,19 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   no_aggregate <- isTRUE(dots$no_aggregate)
   pkg <- if (is.null(dtm)) getOption("lidR.raster.default") else lidR:::raster_pkg(dtm)
 
-  # Check if some flightline are not aligned wich each other. This is really harmful
-  # for the conductivity in the CHM. It is is the case we must realign and recompute a DTM
-  offsets <- flightlines_z_misalignment_matrix(las)
-  dz <-  na.omit(as.numeric(offsets$offsets))
-  if (any(abs(dz) > 0.07))
-  {
-    warning("Detection of misaligned flightlines. Automatic realignment and recomputation of the DTM will be performed", call. = FALSE)
-    las <- flightlines_z_realignment(las, offsets)
-    dtm <- lidR::rasterize_terrain(las, 1, lidR::tin(), pkg = "raster")
-  }
+  # # Check if some flightline are not aligned wich each other. This is really harmful
+  # # for the conductivity in the CHM. It is is the case we must realign and recompute a DTM
+  #offsets <- flightlines_z_misalignment_matrix(las)
+  # invalid = offsets$count < 100
+  # offsets$offsets[invalid] = NA
+  # offsets$count[invalid] = 0
+  # dz <-  na.omit(as.numeric(offsets$offsets))
+  # if (any(abs(dz) > 0.07))
+  # {
+  #   warning("Detection of misaligned flightlines. Automatic realignment and recomputation of the DTM will be performed", call. = FALSE)
+  #   las <- flightlines_z_realignment(las, offsets)
+  #   dtm <- lidR::rasterize_terrain(las, 1, lidR::tin(), pkg = "raster")
+  # }
 
   # Extract the DTM
   if (is.null(dtm))
@@ -75,7 +78,6 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
     stop("dtm must be a RasterLayer or must be NULL")
   }
 
-
   mask = NULL
   if (!is.null(water) && length(sf::st_geometry(water)) > 0)
   {
@@ -84,7 +86,15 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
     bbox <- suppressWarnings(sf::st_bbox(las))
     bbox <- sf::st_set_crs(bbox, sf::st_crs(water))
     mask <- sf::st_crop(water, bbox)
-    if (length(mask) > 0) mask <- sf::as_Spatial(mask) else mask = NULL
+    if (length(mask) > 0)
+    {
+      las = lidR::classify_poi(las, lidR::LASWATER, roi = water)
+      mask <- sf::as_Spatial(mask)
+    }
+    else
+    {
+      mask = NULL
+    }
   }
 
   # plot(dtm, col = gray(1:30/30))
@@ -97,19 +107,21 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   template2m[] <- 0
 
   nlas <- lidR::normalize_height(las, dtm) |> suppressMessages() |> suppressWarnings()
+  nlas@data[Classification == LASWATER & Z > 2, Classification := LASBRIGDE]
+  bridge = lidR::filter_poi(nlas, Classification == LASBRIGDE)
+  bridge = sf::st_coordinates(bridge, z = FALSE)
+
 
   # Terrain metrics using the raster package (slope, roughness)
-  terrain   <- terra::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
-  slope     <- terrain$slope
-  roughness <- terrain$roughness
+  slope <- terra::terrain(dtm, opt = c("slope"), unit = "degrees")
+  if (!is.null(mask)) slope <- raster::mask(slope, mask, inverse = T)
+
   #plot(slope, col = gray(1:30/30))
-  #plot(roughness, col = gray(1:30/30))
 
   # Slope-based conductivity
   s <- param$conductivity$s
   #sigma_s   <- dtm
   #sigma_s[] <- activation(slope[], s, "piecewise-linear", asc = FALSE)
-  if (!is.null(mask)) slope <- raster::mask(slope, mask, inverse = T)
   sigma_s <- activation(slope, s, "piecewise-linear", asc = FALSE)
   #sigma_s = activation2(slope)
   sigma_s = raster::aggregate(sigma_s, fact = 2, fun = mean)
@@ -117,22 +129,35 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   if (display) raster::plot(sigma_s, col = viridis::viridis(25), main = "Conductivity slope")
   verbose("   - Slope conductivity map \n")
 
-  # Roughness-based conductivity
-  r <- param$conductivity$r
-  #sigma_r   <- dtm
-  #sigma_r[] <- activation(roughness[], r, "piecewise-linear", asc = FALSE)
-  #sigma_r = activation2(roughness)
-  #sigma_r = raster::aggregate(sigma_r, fact = 2)
+  # # Roughness-based conductivity
+  # r <- param$conductivity$r
+  # f = function(z)
+  # {
+  #   x = matrix(z,3,3)
+  #
+  #   d1 = abs(x[1,2] - (x[1,1] + x[1,3])/2)
+  #   d2 = abs(x[3,2] - (x[3,1] + x[3,3])/2)
+  #   d3 = abs(x[2,1] - (x[1,1] + x[1,3])/2)
+  #   d4 = abs(x[2,3] - (x[3,1] + x[3,3])/2)
+  #   d5 = abs(x[2,2] - (x[1,1] + x[3,3])/2)
+  #   d6 = abs(x[2,2] - (x[1,3] + x[3,1])/2)
+  #
+  #   sd(c(d1,d2,d3,d4,d5,d6))
+  # }
+  #
+  # rough = dtm |> terra::rast() |> terra::focal(matrix(1,3,3), f) |> raster::raster()
+  # if (!is.null(mask)) rough <- raster::mask(rough, mask, inverse = T)
+  # if(display) raster::plot(rough, col = gray(1:30/30))
+  # sigma_r = activation(rough, c(0.02, 0.05), "piecewise-linear", asc = FALSE)
+  # sigma_r = raster::aggregate(sigma_r, fact = 2)
+
 
   #if (display) raster::plot(sigma_r, col = viridis::viridis(25), main = "Conductivity roughness")
   #verbose("   - Roughness conductivity map\n")
 
   # Edge-based conductivity
   e    <- param$conductivity$e
-  slop <- raster::as.matrix(slope)
-  sobl <- sobel(slop)
-  sigma_e <- dtm
-  sigma_e[] <- sobl
+  sigma_e <- sobel.RasterLayer(slope)
   #plot(sigma_e, col = gray(1:30/30))
   #sigma_e <- activation(sigma_e, e, "thresholds", asc = FALSE)
   sigma_e = activation2(sigma_e)
@@ -147,11 +172,13 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   if (use_intensity)
   {
     irange = intensity_range_by_flightline(las, template2m)
+    irange = terra::focal(irange, matrix(1,3,3), mean, na.rm = T)
+    if (!is.null(mask)) irange <- raster::mask(irange, mask, inverse = T)
 
     if (display) raster::plot(irange, col = heat.colors(20), main = "Intensity range")
 
     #th <- stats::quantile(irange[], probs = q, na.rm = TRUE)
-    th <- c(0.1,0.3)
+    th <- c(0.25,0.35)
     #sigma_i <- template2m
     sigma_i <- activation(irange, th, "piecewise-linear", asc = FALSE)
     #sigma_i = activation2(irange)
@@ -161,52 +188,45 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   }
 
   # CHM-based conductivity
-  h <- param$conductivity$h
-  chm <- lidR::grid_canopy(nlas, template2m, lidR::p2r())
-  #plot(chm, col = height.colors(25))
+  #h <- c(1,1.5)
+  #chm = grid_canopy(nlas, template2m, p2r())
+  #chm <- chm_by_flightline(nlas, template2m)
+  #if (display) plot(chm, col = height.colors(25))
   #sigma_h <- chm
 
-  if (!is.null(mask)) chm <- raster::mask(chm, mask, inverse = T)
-  sigma_h <- activation(chm, h, "piecewise-linear", asc = FALSE)
+  #if (!is.null(mask)) chm <- raster::mask(chm, mask, inverse = T)
+  #sigma_h <- activation(chm, h, "piecewise-linear", asc = FALSE)
   #sigma_h <- activation2(chm)
+  #h <- param$conductivity$h
+  #chm = rasterize_canopy(nlas, template2m, p2r())
+  #sigma_h <- activation(chm, h, "piecewise-linear", asc = FALSE)
+  #plot(chm, col = height.colors(25))
 
-  if (display) raster::plot(sigma_h, col = viridis::inferno(25), main = "Conductivity CHM")
-  verbose("   - CHM conductivity map\n")
+  #if (display) raster::plot(sigma_h, col = viridis::inferno(25), main = "Conductivity CHM")
+  #verbose("   - CHM conductivity map\n")
 
   # Lowpoints-based conductivity
   # Check the presence/absence of lowpoints
-  z1 <- 0.5
-  z2 <- 3
-  th <- 8
+  #th <- 2
+  #sigma_lp = low_points_by_flightline(nlas, template2m, th)
+  #if (!is.null(mask)) sigma_lp <- raster::mask(sigma_lp, mask, inverse = T)
 
-  tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
-  lp  <- lidR:::rasterize_fast(tmp, template2m, 0, "count", pkg = "raster")
-  lp[is.na(lp)] <- 0
-  if (!is.null(mask)) lp <- raster::mask(lp, mask, inverse = T)
-  #sigma_lp <- template2m
-  sigma_lp <- activation(lp, th, "thresholds", asc = FALSE)
-  #sigma_lp <- activation2(lp)
-
-  if (display) raster::plot(lp, col = viridis::inferno(20), main = "Number of low point")
-
-  if (display) raster::plot(sigma_lp, col = viridis::inferno(20), main = "Bottom layer")
-  verbose("   - Bottom layer conductivity map\n")
+  #if (display) raster::plot(sigma_lp, col = viridis::inferno(20), main = "Number of low point")
+  #verbose("   - Bottom layer conductivity map\n")
 
   # Density-based conductivity
   # Notice that the paper makes no mention of smoothing
   q <- param$conductivity$d
 
-  gnd <- lidR::filter_ground(nlas)
-  d   <- lidR::grid_density(gnd, template2m)
-  if (!is.null(mask)) d <- raster::mask(d, mask, inverse = T, updatevalue = 0)
-  if (display) raster::plot(d, col = viridis::inferno(10), main = "Density of ground points")
-
-  overlap = pixel_metrics(gnd, ~length(unique(PointSourceID)), res = d, pkg = "raster")
-  overlap[is.na(overlap)] = 1
-  d = d/overlap
-  if (display) raster::plot(d, col = viridis::inferno(10), main = "Density of ground points")
-
+  d <- density_gnd_by_flightline(las, template2m, drop_angles = 0)
+  d = terra::focal(d, matrix(1,3,3), mean, na.rm = T)
   th <- mean(d[], na.rm = T)
+  d[is.na(d)] = 0
+
+  if (!is.null(mask)) d <- raster::mask(d, mask, inverse = T, updatevalue = 0)
+  if (display) raster::plot(d, col = viridis::inferno(15), main = "Density of ground points")
+
+
   th <- c(th*1.1, th*2)
   #val <- d[]
   #val <- val[val > 0]
@@ -218,14 +238,18 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   if (display)  raster::plot(sigma_d, col = viridis::inferno(25), main = "Conductivity density")
   verbose("   - Density conductivity map\n")
 
+
   # Final conductivity sigma
   #alpha = param$conductivity$alpha
   #alpha$i = alpha$i * as.numeric(use_intensity)
   max_coductivity <- 2 + as.numeric(use_intensity)
-  sigma <- (sigma_lp > 0.5) * (sigma_e > 0.3)  * (sigma_s > 0.6) * (sigma_d + sigma_h + sigma_i)
+  sigma <- (sigma_e > 0.2)  * (sigma_s > 0.6) * (sigma_d + sigma_i + sigma_e)
   sigma <- sigma/max_coductivity
-  sigma[sigma < 0.1] <- 0.1
-  sigma[is.na(sigma)] <- 0.1
+  sigma[is.na(sigma)] <- 0.1 # lakes
+  cells = raster::cellFromXY(sigma, bridge)
+  sigma[cells] = 0.75
+
+  sigma_edge = sobel.RasterLayer(sigma)
 
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Conductivity 2 m", maxpixels = 1e6)
   verbose("   - Global conductivity map\n")
@@ -290,13 +314,13 @@ intensity_range_by_flightline <- function(las, res)
   if (length(ids) == 1)
   {
     ans = rasterize_intensityrange(las, res)
-    raster::raster(ans)
+    return(raster::raster(ans))
   }
 
   ans <- vector("list", 0)
   for (i in ids) {
     psi <- lidR::filter_poi(las, PointSourceID == i)
-    q = quantile(psi$Intensity, probs = 0.98)
+    q = quantile(psi$Intensity, probs = 0.95)
     psi@data[Intensity>q, Intensity := q]
     ans[[as.character(i)]] <- rasterize_intensityrange(psi, res)
   }
@@ -305,9 +329,110 @@ intensity_range_by_flightline <- function(las, res)
   #plot(ans, col = heat.colors(50))
   ans = terra::stretch(ans, maxv = 1)
   #plot(ans, col = heat.colors(50))
-  ans <- terra::tapp(ans, 1, fun = mean, na.rm = TRUE)
+  ans <- terra::tapp(ans, 1, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
   return(raster::raster(ans))
 }
+
+density_gnd_by_flightline <- function(las, res, drop_angles = 3)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(las$PointSourceID)
+  gnd = filter_ground(las)
+  angle_max = max(abs(las$ScanAngleRank))
+  gnd = filter_poi(gnd, abs(ScanAngleRank) < angle_max-drop_angles)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_density(gnd, res)
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(gnd, PointSourceID == i)
+    d <- rasterize_density(psi, res)
+    d[d == 0] = NA
+    q = quantile(d[], probs = 0.95, na.rm = TRUE)
+    d[d>q] = q
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans = terra::stretch(ans, maxv = 1)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::tapp(ans, 1, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+low_points_by_flightline <- function(nlas, res, th = 2)
+{
+  .N <- PointSourceID <- NULL
+
+  z1 <- 0.5
+  z2 <- 3
+  res <- terra::rast(res)
+  ids <- unique(nlas$PointSourceID)
+
+  if (length(ids) == 1)
+  {
+    tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
+    ans = lidR:::rasterize_fast(tmp, res, 0, "count", pkg = "terra")
+    return(raster::raster(ans > th))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(nlas, PointSourceID == i, Z > z1, Z < z2)
+    d <- lidR:::rasterize_fast(psi, res, 0, "count", pkg = "terra")
+    d[is.na(d)] = 0
+    ans[[as.character(i)]] = d <= 3
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::tapp(ans, 1, fun = min, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+chm_by_flightline <- function(nlas, res)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(nlas$PointSourceID)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_canopy(nlas, res, p2r())
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(nlas, PointSourceID == i)
+    d <- rasterize_canopy(psi, res, lidR::p2r())
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  ans = terra::mask(ans, terra::vect(water), inverse = T)
+  #plot(ans, col = height.colors(50))
+  ans = terra::stretch(ans, minv = 0)
+  #plot(ans, col = height.colors(50))
+  ans <- terra::tapp(ans, 1, fun = min, na.rm = TRUE)
+  #plot(ans, col = height.colors(50))
+  ans =  ans - min(ans[], na.rm = TRUE)
+  #plot(ans, col = height.colors(50))
+
+  return(raster::raster(ans))
+}
+
 
 rasterize_intensityrange <- function(las, res)
 {

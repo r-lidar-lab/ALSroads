@@ -54,7 +54,7 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
   list_intersections <- list()
   heading <- get_heading(start, end)
 
-  sub_aoi_conductivity <- query_conductivity_aoi(conductivity, seed)
+  sub_aoi_conductivity <- query_conductivity_aoi(conductivity, seed, smooth = F)
 
   #plot(conductivity, col = viridis::inferno(50))
   #plot(terra::ext(sub_aoi_conductivity), col = "red", add = T)
@@ -71,11 +71,12 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
   current_cost <- 0
   k <- 2
   overcost = 0
+  novercost = 0
 
   cat("Driving the conductivity raster\n")
-  while (overcost <= 1 & !is.infinite(cost_max))
+  while (overcost <= cost_max & !is.infinite(cost_max))
   {
-    cat("", (k-1)*sightline, " m\r", sep = "")
+    cat("", (k-1)*sightline*0.8, " m\r", sep = "")
     flush.console()
 
     # Compute heading from the two previous points
@@ -90,9 +91,10 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
 
     # Generate a very small area of interest corresponding to what can be seen
     search_zone <- sf::st_bbox(c(start, sf::st_geometry(ends)))
-    search_zone <- terra::ext(c(search_zone[1], search_zone[3],search_zone[2],search_zone[4])) + resolution
+    search_zone <- terra::ext(c(search_zone[1], search_zone[3],search_zone[2],search_zone[4])) + 10
     aoi <- terra::crop(sub_aoi_conductivity, search_zone)
-    #plot(aoi, col = viridis::inferno(50))
+    aoi <- terra::stretch(aoi, maxv = 1)
+    #plot(aoi, col = viridis::inferno(50), range = c(0,1))
     #plot(start,add =T, col = "red", pch = 19)
     #plot(ends$geometry,add =T, col = "red", pch = 19)
 
@@ -111,7 +113,7 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       line <- sf::st_cast(c(p1, p2), "LINESTRING") |> sf::st_sfc()
       line <- sf::st_set_crs(line, sf::st_crs(seed))
 
-      sub_aoi_conductivity <- query_conductivity_aoi(conductivity, line)
+      sub_aoi_conductivity <- query_conductivity_aoi(conductivity, line, smooth = F)
       #plot(conductivity, col = viridis::inferno(50))
       #plot(raster::extent(sub_aoi_conductivity), col = "red", add = T)
       #plot(seed, add = T, lwd = 3, col = "red")
@@ -138,6 +140,7 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
 
       # Re-extract the AOI and recompute the transition
       aoi <- terra::crop(sub_aoi_conductivity, search_zone)
+      aoi <- terra::stretch(aoi, maxv = 1)
       trans <- transition(aoi, geocorrection = TRUE)
     }
 
@@ -163,23 +166,35 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       relative_angles <- abs(ends$angle[idx_main] - ends$angle[idx_other])*180/pi
       ends_other <- ends[idx_other,]
       cost_other <- cost[idx_other]
-      ends_other <- ends_other[cost_other < current_cost*1.3 & relative_angles > 20,]
+      ends_other <- ends_other[relative_angles > 15,]
 
       L <- gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(end), output = "SpatialLines")
       L <- sf::st_geometry(sf::st_as_sf(L))
+      C <- sf::st_coordinates(L)
+      C <- C[1:(nrow(C)*0.8),-3]
+      L <- sf::st_sfc(sf::st_linestring(C))
+      end <- lwgeom::st_endpoint(L)
+
       list_coords[[k+1]] <- sf::st_geometry(end)[[1]]
       list_lines[[k]] <- L[[1]]
 
       # Protect against infinite loops
-      #mask <- sf::st_buffer(L, dist = 5, endCapStyle = "FLAT")
-      #mask <- sf::st_set_crs(mask, sf::st_crs(seed))
-      #sub_aoi_conductivity <- terra::mask(sub_aoi_conductivity, terra::vect(mask), inverse = TRUE, updatevalue = 0)
+      mask <- lwgeom::st_linesubstring(L, 0, 0.95)
+      mask <- sf::st_buffer(mask, dist = 5, endCapStyle = "FLAT")
+      mask <- sf::st_set_crs(mask, sf::st_crs(seed))
+      sub_aoi_conductivity <- terra::mask(sub_aoi_conductivity, terra::vect(mask), inverse = TRUE, updatevalue = 0)
       #plot(sub_aoi_conductivity, col = viridis::inferno(50))
 
       if (current_cost > cost_max)
-        overcost = overcost + 1
+      {
+        novercost = novercost + 1
+        overcost = overcost + (current_cost - cost_max)
+      }
       else
+      {
+        novercost = 0
         overcost = 0
+      }
 
       I <- NULL
       if (length(sf::st_geometry(ends_other)) > 0 & length(sf::st_geometry(ends_other)) < 3)
@@ -200,10 +215,11 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       ends2 <- generate_ends(start2, angles_rad, sightline, heading)
       ends2 <- sf::st_as_sf(ends2)
       ends2$angle = angles_rad
-      ends2 <- ends2[abs(ends2$angle) > 15*pi/180,]
+      #ends2 <- ends2[abs(ends2$angle) > 15*pi/180,]
       tmp <- terra::extract(aoi, sf::st_coordinates(ends2))[[1]]
       ends2 <- ends2[!is.na(tmp),]
-      # plot(aoi, col = viridis::inferno(50))
+      angles_rad2 = ends2$angle
+      # plot(aoi, col = viridis::inferno(50), range = c(0,1))
       # plot(start, add = TRUE, pch = 19)
       # plot(ends$geom, col = 'red', add = TRUE, pch = 19)
       # plot(end, col = 'green', add = TRUE, pch = 19)
@@ -221,8 +237,8 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
         cost2 <- ans2$cost
         ends2 <- ends2[idx2,]
         cost2 <- cost2[idx2]
-        ends2 <- ends2[cost2 < current_cost*1.3,]
-        #plot(cost)
+        ends2 <- ends2[cost2 < cost_max & abs(ends2$angle) > 15*pi/180,]
+        #plot(ans2$cost)
         #plot(ends2, add =T, pch = 19, col = "green")
 
         if (length(sf::st_geometry(ends2)) > 0 & length(sf::st_geometry(ends2)) < 3)
@@ -231,9 +247,18 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
           I2 <- sf::st_geometry(sf::st_as_sf(I2))
           I2 <- sf::st_difference(I2,L)
           I2 <- I2[as.numeric(sf::st_length(I2)) > 0.5 * sightline]
-          for(II in I2)
+          I2 <- I2[sf::st_geometry_type(I2) == "LINESTRING"]
+          if (length(I2) > 0)
           {
-            if (sf::st_geometry_type(II) == "LINESTRING")
+            keep <- sapply(I2, function(x)
+            {
+                A = lwgeom::st_startpoint(x)
+                B = lwgeom::st_endpoint(x)
+                C = gdistance::costDistance(trans, sf::st_coordinates(A), sf::st_coordinates(B))
+                sf::st_length(x)/C >= min_conductivity
+            })
+            I2 <- I2[keep]
+            for (II in I2)
               list_intersections <- c(list_intersections, list(II))
           }
         }
@@ -244,19 +269,30 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
       {
         if (length(angles_rad) == length(cost))
         {
-           plot(angles_rad, cost, type = "b", ylim = c(0, max(cost) *1.1))
-           lines(angles_rad, spike_preserving_smooth(cost, n = 5), type = "b", col = "red")
-           abline(v = angles_rad[c(idx_main, idx_other)])
-           abline(h = cost_max)
+          plot(angles_rad, cost, type = "l", ylim = c(0, max(cost) *1.1), col = "green")
+          lines(angles_rad, spike_preserving_smooth(cost, n = 7), col = "darkgreen")
+          abline(v = angles_rad[c(idx_main, idx_other)], col = "darkgreen")
+
+          abline(h = cost_max, lty = 3)
+          abline(v = c(-0.2612, 0.2612), lty = 3)
+          if (!is.null(ans2))
+          {
+            lines(angles_rad2, ans2$cost, col = "lightblue")
+            lines(angles_rad2, spike_preserving_smooth(ans2$cost, n = 7), col = "blue")
+            abline(v = angles_rad2[c(idx2)], col = "blue")
+
+          }
         }
-        terra::plot(terra::crop(sub_aoi_conductivity, terra::ext(aoi) + 100), col = viridis::inferno(50))
+        terra::plot(terra::crop(sub_aoi_conductivity, terra::ext(aoi) + 100), col = viridis::inferno(50), main = k, range = c(0,1))
+        terra::plot(aoi, add = T, col = viridis::inferno(50))
+        plot(terra::ext(aoi), add = T)
         ends$cost = cost
         tryCatch({
           plot(ends["cost"], pal = viridis::viridis, pch = 19, add = T, breaks = "quantile")
         }, error = function(x) {
           plot(ends$geometry, col = "red", add = T, pch = 19, cex = 0.5)
         })
-        paths = gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(ends), output = "SpatialLines")
+        paths = gdistance::shortestPath(trans, sf::st_coordinates(start), sf::st_coordinates(ends), output = "SpatialLines") |> suppressWarnings()
         plot(p1, col = "red", pch = 19, add = T)
         plot(p2, col = "red", pch = 19, add = T)
         sp::plot(paths, add = T, col = "red")
@@ -264,12 +300,13 @@ drive_road <- function(seed, conductivity, existing_network = NULL, fov = 85, si
         if(!is.null(I)) plot(I, add = T, col = "blue", lwd = 3)
         if(!is.null(I2)) plot(I2, add = T, col = "cornflowerblue", lwd = 3)
         plot(end, add = T, col = "green", pch = 19, cex = 2)
-        print(current_cost)
+        cat("cost =", current_cost, "\n")
+        cat("overcost =", overcost, "\n")
       }
     }
   }
 
-  list_lines = list_lines[1:(length(list_lines)-overcost)]
+  list_lines = list_lines[1:(length(list_lines)-novercost)]
 
   newline <- sf::st_sfc(list_lines) |>
     sf::st_coordinates() |>
@@ -351,7 +388,7 @@ get_heading <- function(from, to)
   heading <- atan2(Ay-By, Ax-Bx)
 }
 
-query_conductivity_aoi <- function(conductivity, seed)
+query_conductivity_aoi <- function(conductivity, seed, smooth = TRUE)
 {
   resolution <- terra::res(conductivity)[1]
 
@@ -364,10 +401,20 @@ query_conductivity_aoi <- function(conductivity, seed)
   #plot(seed, add = T, lwd = 3)
 
   conductivity_crop <- terra::crop(conductivity, terra::vect(aoi))
-  #plot(conductivity_crop, col = viridis::viridis(50))
+  #plot(conductivity_crop, col = viridis::inferno(50))
   #plot(seed, add = T, lwd = 3, col = "red")
 
+  if (smooth)
+  {
+    zero = conductivity_crop == 0
+    conductivity_crop[zero] = NA
+    kernel = matrix(1, 3, 3)
+    conductivity_crop <- terra::focal(conductivity_crop, kernel, "mean", na.rm = TRUE)
+    conductivity_crop[zero] = 0
+  }
+
   conductivity_crop[is.na(conductivity_crop)] <- 0
+
   return(conductivity_crop)
 }
 
@@ -446,7 +493,7 @@ local_maxima_with_height <- function(x)
   if (length(i) == 0 | length(j) == 0)
     return(data.frame(idx = 0, depth = 0))
 
-  #plot(x)
+  #plot(x, type = "b")
   #abline(v = i, col = "blue")
   #abline(v = j, col = "red")
 
@@ -470,7 +517,8 @@ local_maxima_with_height <- function(x)
     }
   }
 
-  return(data.frame(idx = i, depth = depths))
+  ans = data.frame(idx = i, depth = depths)
+  return(ans)
 }
 
 find_reachable <- function(start, ends, trans, cost_max)
@@ -480,24 +528,52 @@ find_reachable <- function(start, ends, trans, cost_max)
   cost <- gdistance::costDistance(trans, sf::st_coordinates(start), sf::st_coordinates(ends))
   cost <- as.numeric(cost)
   if (all(is.infinite(cost))) return(NULL)
-  cost[is.infinite(cost)] <- 2 * max(cost[!is.infinite(cost)])
+  cost[is.infinite(cost)] <- max(cost[!is.infinite(cost)])+1
 
   # Select local minima of cost
   smooth <- 5
-  minima <- local_maxima_with_height(-spike_preserving_smooth(cost, n = smooth))
-  if (sum(minima$depth > 4) > 0) {
+  scost = -spike_preserving_smooth(cost, n = smooth)
+  minima <- local_maxima_with_height(scost)
+
+  if (sum(minima$depth > 4) > 0)
+  {
     minima <- minima[minima$depth > 4,]
-    minima <- minima$idx + as.integer(smooth/2)
-    minima <- sapply(minima, function(i){
+    minima$idx <- minima$idx + as.integer(smooth/2)
+
+    minima$idx <- sapply(minima$idx, function(i)
+    {
       j = (i-3):(i+3)
+      j = j[j>0]
       return(j[which.min(cost[j])])
     })
-  } else {
-    minima <- which.min(cost)
+
+    if (any(diff(minima$idx) <= 2 ))
+    {
+      minima$idx <- sapply(minima$idx, function(i){
+        j = (i-3):(i+3)
+        j = j[j>0]
+        return(j[which.min(cost[j])])
+      })
+    }
+
+    if (any(diff(minima$idx) <= 2))
+    {
+      minima$idx <- sapply(minima$idx, function(i){
+        j = (i-3):(i+3)
+        j = j[j>0]
+        return(j[which.min(cost[j])])
+      })
+    }
+  }
+  else
+  {
+    minima <- data.frame(idx = which.min(cost), depth = 0)
   }
 
-  keep = cost[minima] <= cost_max
-  if (sum(keep) > 0) minima = minima[keep]
+  minima$cost =  cost[minima$idx]
+  keep = minima$cost <= cost_max | (minima$depth > 75 & minima$cost <= cost_max*1.1)
+  if (sum(keep) > 0) minima = minima[keep,]
+  minima = minima$idx
 
   # Main road
   idx_main <- which.min(cost)
@@ -505,8 +581,9 @@ find_reachable <- function(start, ends, trans, cost_max)
 
   # Potential intersection
   idx_other <- minima[minima != idx_main]
+  idx_other <- unique(idx_other)
 
-  return(list(idx_main = idx_main, idx_other = idx_other, cost = cost))
+  return(list(idx_main = idx_main, idx_other = idx_other , cost = cost))
 }
 
 rotate_pi <- function(X, C)
@@ -536,11 +613,11 @@ mask_existing_network <- function(x, existing_network)
 spike_preserving_smooth <- function(x, n = 5)
 {
   y = ma(x, n)
-  dp <- abs(x-y)
-  th = quantile(dp, probs = 0.90, na.rm = T)
+  dp <- x-y
+  th = -10
   dp[is.na(dp)] = 0
-  y[dp > th] = x[dp > th]
-  #plot(x, type = "b", ylim = c(0, max(x) *1.1))
-  #points(y, type = "b", col = "red")
+  y[dp < th] = x[dp < th]
+  #plot(x, type = "l", ylim = c(0, max(x) *1.1))
+  #lines(y, col = "red")
   y
 }

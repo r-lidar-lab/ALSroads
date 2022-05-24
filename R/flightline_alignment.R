@@ -61,17 +61,20 @@ flightlines_z_realignment <- function(las, M)
 
   if (length(k) == 0)
   {
+    print(1)
     M <- fill_misalignment_matrix(M)
-    island <- anyNA(M)
-    M$offsets[is.nan(M$offsets)] = 0
+    island <- anyNA(M$offsets)
+    M$offsets[is.na(M$offsets)] = 0
 
     if (!island)
     {
+      print(2)
       offset_tot = apply(M$offsets, 1, \(x) sum(abs(x)))
       k = which(!is.na(offset_tot))
     }
     else
     {
+      print(3)
       offset_tot = -apply(M$count, 1, \(x) sum(abs(x)))
       k = which(!is.na(offset_tot))
     }
@@ -85,6 +88,7 @@ flightlines_z_realignment <- function(las, M)
   #k <- which.max(u$N)
 
   offsets <- as.numeric(M$offsets[,k])
+  print(offsets)
   newZ <- las$Z - offsets[idx]
   lidR:::quantize(newZ, las[["Z scale factor"]], las[["Z offset"]], by_reference = TRUE)
   las@data[["Z"]] <- newZ
@@ -114,6 +118,7 @@ fill_misalignment_matrix <- function(M)
     }
   }
 
+  E[is.nan(E)] = NA
   return(list(offsets = E, count = M$count))
 }
 
