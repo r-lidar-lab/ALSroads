@@ -300,22 +300,21 @@ sobel <- function(img)
 
 make_caps <- function(centerline, param)
 {
-  XY <- sf::st_coordinates(centerline)[,1:2]
-  n <- nrow(XY)
+
   buf <- param[["extraction"]][["road_buffer"]]
 
-  angles <- st_angles(centerline)
-  start_angle <- angles[1]
-  end_angle <- angles[length(angles)]
+  len <- as.numeric(20/sf::st_length(centerline))
+  start <- lwgeom::st_linesubstring(centerline, 0, len)
+  end <- lwgeom::st_linesubstring(centerline, 1-len, 1)
+  s1 <- lwgeom::st_startpoint(start)
+  e1 <- lwgeom::st_endpoint(start)
+  s2 <- lwgeom::st_startpoint(end)
+  e2 <- lwgeom::st_endpoint(end)
+  l1 <- sf::st_coordinates(c(s1, e1))
+  l2 <- sf::st_coordinates(c(s2, e2))
 
-  ii <- 2
-  if (start_angle > 90) ii <- 3
-
-  jj <- n-1
-  if (end_angle > 90) jj <- n-2
-
-  start <- sf::st_sfc(sf::st_linestring(XY[c(1,ii),]), crs = sf::st_crs(centerline))
-  end <- sf::st_sfc(sf::st_linestring(XY[c(jj,n),]), crs = sf::st_crs(centerline))
+  start <- sf::st_sfc(sf::st_linestring(l1), crs = sf::st_crs(centerline))
+  end <- sf::st_sfc(sf::st_linestring(l2), crs = sf::st_crs(centerline))
 
   poly1 <- sf::st_geometry(sf::st_buffer(start, buf, endCapStyle = "FLAT"))
   poly2 <- sf::st_geometry(sf::st_buffer(end,   buf, endCapStyle = "FLAT"))

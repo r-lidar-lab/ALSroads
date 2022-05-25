@@ -203,6 +203,9 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
     # road, the dtm or conductivity layer, water bodies and param to draw a new accurate line
     res <- least_cost_path(las, centerline, dtm, conductivity, water, param)
 
+    if (sf::st_geometry_type(res) == "MULTILINESTRING")
+      stop("Internal error. A MULTILINESTRING has been returned. Please report", call. = FALSE)
+
     # If the conductivity of the result is 0 it means that the path finder was not able to reach the
     # point B. We assume the road does not exist.
     if (res$CONDUCTIVITY == 0)
