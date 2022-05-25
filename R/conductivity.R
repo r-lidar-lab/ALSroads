@@ -116,10 +116,12 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
       u <- nlas@data[, list(N = .N, Imin = min(Intensity), Imean = as.numeric(median(Intensity)), Isd = fsd(Intensity)), by = PointSourceID]
       data = nlas@data[, c("PointSourceID", "Intensity")]
       data[, nIntensity := (Intensity - mean(Intensity))/sd(Intensity), by = PointSourceID]
+      data[is.na(nIntensity), nIntensity := 0]
 
       i <- which.max(u$N)
       Iref = u$Imean[i]
       u$f = u$Imean/Iref
+      u[f == 0, f := 1]
       idx <- match(nlas$PointSourceID, u$PointSourceID)
       Icorr = nlas$Intensity/u$f[idx]
       nlas$Intensity <- as.integer(Icorr)
