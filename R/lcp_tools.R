@@ -157,17 +157,11 @@ mask_conductivity <- function(conductivity, centerline, param)
 
 start_end_points = function(centerline, param)
 {
-  poly1 <- sf::st_buffer(centerline, param$extraction$road_buffer, endCapStyle = "FLAT")
-  start <- lwgeom::st_startpoint(centerline)
-  end   <- lwgeom::st_endpoint(centerline)
-  start <- sf::st_buffer(start, param$extraction$road_buffer)
-  end   <- sf::st_buffer(end, param$extraction$road_buffer)
-  start <- sf::st_difference(start, poly1)
-  end   <- sf::st_difference(end, poly1)
-  A     <- sf::st_centroid(start)
-  B     <- sf::st_centroid(end)
-  A     <- sf::st_coordinates(A)
-  B     <- sf::st_coordinates(B)
+  caps <- make_caps(centerline, param)$caps
+  P <- sf::st_cast(caps, "POLYGON")
+  C <- sf::st_centroid(p)
+  A <- sf::st_coordinates(C[1])
+  B <- sf::st_coordinates(C[2])
   return(list(A = A, B = B))
 }
 
