@@ -159,7 +159,7 @@ start_end_points = function(centerline, param)
 {
   caps <- make_caps(centerline, param)$caps
   P <- sf::st_cast(caps, "POLYGON")
-  C <- sf::st_centroid(p)
+  C <- sf::st_centroid(P)
   A <- sf::st_coordinates(C[1])
   B <- sf::st_coordinates(C[2])
   return(list(A = A, B = B))
