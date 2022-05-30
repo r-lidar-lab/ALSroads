@@ -147,6 +147,7 @@ mask_conductivity <- function(conductivity, centerline, param)
   conductivity[res] <- 1
   res <- !is.na(lidR:::point_in_polygons(xy, caps$shields))
   conductivity[res] <- 0
+  conductivity[is.nan(conductivity)] <- NA
 
   if (getOption("ALSroads.debug.finding")) raster::plot(conductivity, col = viridis::inferno(15), main = "Conductivity with end caps")
   verbose("   - Add full conductivity end blocks\n")
@@ -156,17 +157,11 @@ mask_conductivity <- function(conductivity, centerline, param)
 
 start_end_points = function(centerline, param)
 {
-  poly1 <- sf::st_buffer(centerline, param$extraction$road_buffer, endCapStyle = "FLAT")
-  start <- lwgeom::st_startpoint(centerline)
-  end   <- lwgeom::st_endpoint(centerline)
-  start <- sf::st_buffer(start, param$extraction$road_buffer)
-  end   <- sf::st_buffer(end, param$extraction$road_buffer)
-  start <- sf::st_difference(start, poly1)
-  end   <- sf::st_difference(end, poly1)
-  A     <- sf::st_centroid(start)
-  B     <- sf::st_centroid(end)
-  A     <- sf::st_coordinates(A)
-  B     <- sf::st_coordinates(B)
+  caps <- make_caps(centerline, param)$caps
+  P <- sf::st_cast(caps, "POLYGON")
+  C <- sf::st_centroid(P)
+  A <- sf::st_coordinates(C[1])
+  B <- sf::st_coordinates(C[2])
   return(list(A = A, B = B))
 }
 
@@ -220,8 +215,9 @@ transition <- function(conductivity, directions = 8, geocorrection = TRUE)
 
   dataVals <- cbind(val[adj[,1]], val[adj[,2]])
   transition.values <- rowMeans(dataVals)
+  transition.values[is.na(transition.values)] <- 0
 
-  if(!all(transition.values>=0))
+  if(!all(transition.values >= 0))
     warning("transition function gives negative values")
 
   transitionMatr[adj] <- as.vector(transition.values)
@@ -307,22 +303,21 @@ sobel.matrix <- function(img)
 
 make_caps <- function(centerline, param)
 {
-  XY <- sf::st_coordinates(centerline)[,1:2]
-  n <- nrow(XY)
+
   buf <- param[["extraction"]][["road_buffer"]]
 
-  angles <- st_angles(centerline)
-  start_angle <- angles[1]
-  end_angle <- angles[length(angles)]
+  len <- as.numeric(20/sf::st_length(centerline))
+  start <- lwgeom::st_linesubstring(centerline, 0, len)
+  end <- lwgeom::st_linesubstring(centerline, 1-len, 1)
+  s1 <- lwgeom::st_startpoint(start)
+  e1 <- lwgeom::st_endpoint(start)
+  s2 <- lwgeom::st_startpoint(end)
+  e2 <- lwgeom::st_endpoint(end)
+  l1 <- sf::st_coordinates(c(s1, e1))
+  l2 <- sf::st_coordinates(c(s2, e2))
 
-  ii <- 2
-  if (start_angle > 90) ii <- 3
-
-  jj <- n-1
-  if (end_angle > 90) jj <- n-2
-
-  start <- sf::st_sfc(sf::st_linestring(XY[c(1,ii),]), crs = sf::st_crs(centerline))
-  end <- sf::st_sfc(sf::st_linestring(XY[c(jj,n),]), crs = sf::st_crs(centerline))
+  start <- sf::st_sfc(sf::st_linestring(l1), crs = sf::st_crs(centerline))
+  end <- sf::st_sfc(sf::st_linestring(l2), crs = sf::st_crs(centerline))
 
   poly1 <- sf::st_geometry(sf::st_buffer(start, buf, endCapStyle = "FLAT"))
   poly2 <- sf::st_geometry(sf::st_buffer(end,   buf, endCapStyle = "FLAT"))

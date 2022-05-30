@@ -2,8 +2,8 @@
 #'
 #' Check amplitude of differences between corrected and uncorrected roads
 #'
-#' @param roads  multiples lines (\code{sf} format). Corrected roads.
-#' @param roads_ori  multiples lines (\code{sf} format). Original non-corrected roads.
+#' @param roads  multiple lines (\code{sf} format). Corrected roads.
+#' @param ref  multiple lines (\code{sf} format). Original non-corrected roads.
 #' @param field  character. Unique identifier field in both road datasets.
 #'
 #' @return data.frame with metrics about each roads.
@@ -12,31 +12,31 @@
 #' library(sf)
 #'
 #' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="ALSroads")
-#' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
+#' road_ori <- st_read(road, "original", quiet = TRUE)
 #'
 #' df <- check_road_differences(road_cor, road_ori, "objectid")
 #' df
-check_road_differences <- function(roads, roads_ori, field)
+check_road_differences <- function(roads, ref, field)
 {
   IDs1 <- sort(unique(roads[[field]]))
-  IDs2 <- sort(unique(roads_ori[[field]]))
+  IDs2 <- sort(unique(ref[[field]]))
   if (length(IDs1) != length(roads[[field]])) stop("Values in unique identifier field are not unique for 'roads'.", call. = FALSE)
-  if (length(IDs2) != length(roads_ori[[field]])) stop("Values in unique identifier field are not unique for 'roads_ori'.", call. = FALSE)
+  if (length(IDs2) != length(ref[[field]])) stop("Values in unique identifier field are not unique for 'ref'.", call. = FALSE)
   if (!all(IDs1 == IDs2)) stop("Values in unique identifier field are not the same in both road datasets.", call. = FALSE)
 
   # Arrange both road datasets to make sure
   # that line indices will match between them
   roads <- dplyr::arrange(roads, field)
-  roads_ori <- dplyr::arrange(roads_ori, field)
+  ref <- dplyr::arrange(ref, field)
 
   # Compute metrics
-  ratios_area_perimeter <- mapply(diff_area_perimeter, sf::st_geometry(roads_ori), sf::st_geometry(roads))
-  quantiles_along_road <- mapply(diff_along_road, sf::st_geometry(roads_ori), sf::st_geometry(roads), SIMPLIFY = FALSE) |> do.call(what = rbind)
+  ratios_area_perimeter <- mapply(diff_area_perimeter, sf::st_geometry(roads), sf::st_geometry(ref))
+  quantiles_along_road <- mapply(diff_along_road, sf::st_geometry(roads), sf::st_geometry(ref), SIMPLIFY = FALSE) |> do.call(what = rbind)
 
   # Format results
   df_results <- data.frame(
-    field = roads_ori[[field]],
+    field = ref[[field]],
     area_over_perimeter = ratios_area_perimeter) |>
     cbind(quantiles_along_road)
 
@@ -53,9 +53,9 @@ check_road_differences <- function(roads, roads_ori, field)
 #' The larger the value, the larger the differences between the two roads. It
 #' must be noted that in some edge cases, a low value doesn't mean a low difference.
 #'
-#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
 #' @param road_cor  line (\code{sf} or \code{sfc} format). Corrected road.
-#' @param graph  boolean. Whether of not to display graphics.
+#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
+#' @param graph  boolean. Whether or not to display graphics.
 #'
 #' @return numeric. Ratio of the area over the perimeter of the constructed polygon.
 #' @noRd
@@ -63,11 +63,11 @@ check_road_differences <- function(roads, roads_ori, field)
 #' library(sf)
 #'
 #' road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="ALSroads")
-#' road_ori <- st_read(road, "original", quiet = TRUE)
 #' road_cor <- st_read(road, "corrected", quiet = TRUE)
+#' road_ori <- st_read(road, "original", quiet = TRUE)
 #'
-#' ratio <- ALSroads:::diff_area_perimeter(road_ori, road_cor, graph = TRUE)
-diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
+#' ratio <- ALSroads:::diff_area_perimeter(road_cor, road_ori, graph = TRUE)
+diff_area_perimeter <- function(road_cor, road_ori, graph = FALSE)
 {
   road_ori <- sf::st_geometry(road_ori)
   road_cor <- sf::st_geometry(road_cor)
@@ -118,18 +118,18 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 }
 
 
-#' Compute distances quantiles based on how much the two roads are far apart
+#' Compute distances quantiles based on how far apart the two roads are
 #'
 #' Sample points at regular interval each road and measure distances between
 #' each pair of points. The larger the quantiles are, the larger the differences
 #' between the two roads.
 #'
-#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
 #' @param road_cor  line (\code{sf} or \code{sfc} format). Corrected road.
+#' @param road_ori  line (\code{sf} or \code{sfc} format). Original non-corrected road.
 #' @param step  numeric (distance unit). Interval on \code{road_ori} at which sample differences.
-#' @param graph  boolean. Whether of not to display graphics.
+#' @param graph  boolean. Whether or not to display graphics.
 #'
-#' @return named numeric. Quantiles are P50, P90, P100.
+#' @return named numeric. Quantiles P50, P90, P100 along with the maximal difference found at both ends.
 #' @noRd
 #' @examples
 #' library(sf)
@@ -141,8 +141,8 @@ diff_area_perimeter <- function(road_ori, road_cor, graph = FALSE)
 #' plot(st_geometry(road_ori))
 #' plot(st_geometry(road_cor), add = T)
 #'
-#' p <- ALSroads:::diff_along_road(road_ori, road_cor, graph = TRUE)
-diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
+#' p <- ALSroads:::diff_along_road(road_cor, road_ori, graph = TRUE)
+diff_along_road <- function(road_cor, road_ori, step = 10, graph = FALSE)
 {
   road_ori <- sf::st_geometry(road_ori)
   road_cor <- sf::st_geometry(road_cor)
@@ -166,13 +166,21 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
   ls_pts <- lapply(c(road_ori, road_cor), st_full_line_sample, n_steps)
   names(ls_pts) <- c("road_ori", "road_cor")
 
-
-  # Compute differences at P50, P90, P100
+  # Calculate distance between each pair of points
   dist_step <- sf::st_distance(ls_pts[["road_ori"]], ls_pts[["road_cor"]]) |>
     diag() |>
     as.numeric()
 
+  # Compute P50, P90 and P100
+  # Large values, especially at P50, might indicate that the corrected road
+  # took a completely new (and wrong) path
   p <- stats::quantile(dist_step, probs = c(0.5, 0.90, 1))
+  names(p) <- c("P50", "P90", "P100")
+
+  # Compute the maximal difference distance between the pairs at the first and last vertex.
+  # A value near the one of alsroads_default_parameters$extraction$road_buffer might
+  # indicate a problem right at the start/end of the least-cost path extraction process
+  dist_end_max <- c(end_max = max(dist_step[c(1, length(dist_step))]))
 
 
   # Display graphical representation of the differences
@@ -205,5 +213,5 @@ diff_along_road <- function(road_ori, road_cor, step = 10, graph = FALSE)
     graphics::title("Pairwise distances along roads", sprintf("P50: %.1f m | P90: %.1f m | P100: %.1f m", p[1], p[2], p[3]))
   }
 
-  return(p)
+  return(c(p, dist_end_max))
 }

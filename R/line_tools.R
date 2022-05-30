@@ -18,9 +18,9 @@ st_ends_heading <- function(line)
     Ay = M[i-j,2]
     Bx = M[i,1]
     By = M[i,2]
-    unname(atan2(Ay-By, Ax-Bx))*180/pi
+    atan2(Ay-By, Ax-Bx)*180/pi
   })
-  
+  names(headings) <- c("head", "tail")
   return(headings)
 }
 
@@ -62,10 +62,10 @@ st_extend_line <- function(line, distance, end = "BOTH")
 #' Get point from distance on a line
 #'
 #' This is essentially the reverse of rgeos::gProject(). It must be noted
-#' that due floating point precision issue, the point returned won't be
+#' that due floating point precision limitation, the point returned won't be
 #' exactly on the line and thus won't split it.
 #'
-#' @param distance  distance on the \code{line} at which the coordinates will be retreived.
+#' @param distance  distance on the \code{line} at which the coordinates will be retrieved.
 #' @param line  line (\code{sfc} format)
 #' @param from_end  logical; (\code{FALSE} by default); if \code{TRUE} start measuring from the end
 #' of \code{line} instead of from the beginning.
@@ -127,13 +127,17 @@ st_split_at_point <- function(split_point, line, tolerance = 0.01)
   if (as.numeric(sf::st_length(blade)) > tolerance) stop("'split_point' too far from 'line' to perform split")
 
   # Sharpen blade (by slightly extending it)!
+  # Not ideal as this blade extention could cause the line
+  # to be splitted at more than one place. I can also reach
+  # the precision limit of Float64 representation for the
+  # coordinates
   coords <- sf::st_coordinates(blade)
   theta <- atan2(diff(coords[,2]), diff(coords[,1]))
 
-  xmax <- max(coords[,"X"]) + abs(0.01 * cos(theta))
-  ymax <- max(coords[,"Y"]) + abs(0.01 * sin(theta))
-  xmin <- min(coords[,"X"]) - abs(0.01 * cos(theta))
-  ymin <- min(coords[,"Y"]) - abs(0.01 * sin(theta))
+  xmax <- max(coords[,"X"]) + abs(0.0001 * cos(theta))
+  ymax <- max(coords[,"Y"]) + abs(0.0001 * sin(theta))
+  xmin <- min(coords[,"X"]) - abs(0.0001 * cos(theta))
+  ymin <- min(coords[,"Y"]) - abs(0.0001 * sin(theta))
   
   # Split line and extract the two parts
   split_line <- rbind(c(xmax, ymax), c(xmin, ymin)) |>
