@@ -23,6 +23,7 @@ terrain = list(
 )
 
 conductivity = list(
+  sigma_min = 0.1,
   s = c(5, 20),
   r = c(0.2, 0.4),
   e = 40,

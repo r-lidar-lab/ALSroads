@@ -208,6 +208,9 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
   sigma <- sigma_s * sigma_lp * sigma_e * (alpha$d * sigma_d + alpha$h * sigma_h + alpha$r * sigma_r + alpha$i * sigma_i)
   sigma <- sigma/max_coductivity
 
+  smin = param$conductivity$sigma_min
+  sigma[sigma < smin] = smin
+
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Conductivity 1m")
   verbose("   - Global conductivity map\n")
 
