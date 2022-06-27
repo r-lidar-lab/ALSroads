@@ -33,6 +33,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// anisotropic_diffusion
+IntegerMatrix anisotropic_diffusion(Rcpp::IntegerMatrix image, unsigned int iterations, double lambda, double k);
+RcppExport SEXP _ALSroads_anisotropic_diffusion(SEXP imageSEXP, SEXP iterationsSEXP, SEXP lambdaSEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type image(imageSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type iterations(iterationsSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< double >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(anisotropic_diffusion(image, iterations, lambda, k));
+    return rcpp_result_gen;
+END_RCPP
+}
 // quadtree
 Rcpp::XPtr<lidR::QuadTree> quadtree(S4 las);
 RcppExport SEXP _ALSroads_quadtree(SEXP lasSEXP) {
@@ -64,6 +78,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_ALSroads_fsd", (DL_FUNC) &_ALSroads_fsd, 1},
     {"_ALSroads_ffsd", (DL_FUNC) &_ALSroads_ffsd, 1},
+    {"_ALSroads_anisotropic_diffusion", (DL_FUNC) &_ALSroads_anisotropic_diffusion, 4},
     {"_ALSroads_quadtree", (DL_FUNC) &_ALSroads_quadtree, 1},
     {"_ALSroads_filter_orectangle_with_index", (DL_FUNC) &_ALSroads_filter_orectangle_with_index, 6},
     {NULL, NULL, 0}

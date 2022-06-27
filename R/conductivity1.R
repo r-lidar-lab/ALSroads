@@ -28,13 +28,13 @@
 #' }
 #' @return a RasterLayer or SpatRaster
 #' @export
-rasterize_conductivity <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity1 <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
 {
-  UseMethod("rasterize_conductivity", las)
+  UseMethod("rasterize_conductivity1", las)
 }
 
 #' @export
-rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity1.LAS <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
 {
   use_intensity <- "Intensity" %in% names(las)
   display <- getOption("ALSroads.debug.finding")
@@ -249,8 +249,6 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
   cells = raster::cellFromXY(sigma, bridge)
   sigma[cells] = 0.75
 
-  sigma_edge = sobel.RasterLayer(sigma)
-
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Conductivity 2 m", maxpixels = 1e6)
   verbose("   - Global conductivity map\n")
 
@@ -274,21 +272,21 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, water = NULL, param = al
 }
 
 #' @export
-rasterize_conductivity.LAScluster = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity1.LAScluster = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
 {
   x <- lidR::readLAS(las)
   if (lidR::is.empty(x)) return(NULL)
 
-  sigma <- rasterize_conductivity(x, dtm, water, param, ...)
+  sigma <- rasterize_conductivity1(x, dtm, water, param, ...)
   sigma <- lidR:::raster_crop(sigma, lidR::st_bbox(las))
   return(sigma)
 }
 
 #' @export
-rasterize_conductivity.LAScatalog = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity1.LAScatalog = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
 {
   # Enforce some options
-  if (lidR::opt_select(las) == "*") lidR::opt_select(las) <- "xyzci"
+  if (lidR::opt_select(las) == "*") lidR::opt_select(las) <- "xyzciap"
 
   # Compute the alignment options including the case when res is a raster/stars/terra
   alignment <- lidR:::raster_alignment(2)
@@ -300,7 +298,7 @@ rasterize_conductivity.LAScatalog = function(las, dtm = NULL, water = NULL, para
 
   # Processing
   options <- list(need_buffer = TRUE, drop_null = TRUE, raster_alignment = alignment, automerge = TRUE)
-  output  <- lidR::catalog_apply(las, rasterize_conductivity, dtm = dtm, water = water, param = param, ..., .options = options)
+  output  <- lidR::catalog_apply(las, rasterize_conductivity1, dtm = dtm, water = water, param = param, ..., .options = options)
   return(output)
 }
 
@@ -353,6 +351,42 @@ density_gnd_by_flightline <- function(las, res, drop_angles = 3)
   ans <- vector("list", 0)
   for (i in ids) {
     psi <- lidR::filter_poi(gnd, PointSourceID == i)
+    d <- rasterize_density(psi, res)
+    d[d == 0] = NA
+    q = quantile(d[], probs = 0.95, na.rm = TRUE)
+    d[d>q] = q
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans = terra::stretch(ans, maxv = 1)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::tapp(ans, 1, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+density_lp_by_flightline <- function(las, res)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(las$PointSourceID)
+  z1  <- 0.5
+  z2  <- 3
+  tmp <- lidR::filter_poi(las, Z > z1, Z < z2)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_density(gnd, res)
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids)
+  {
+    psi <- lidR::filter_poi(tmp, PointSourceID == i)
     d <- rasterize_density(psi, res)
     d[d == 0] = NA
     q = quantile(d[], probs = 0.95, na.rm = TRUE)

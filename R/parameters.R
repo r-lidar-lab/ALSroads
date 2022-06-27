@@ -24,7 +24,7 @@ terrain = list(
 
 conductivity = list(
   s = c(5, 20),
-  r = c(0.2, 0.4),
+  r = c(0.05, 0.1),
   e = 40,
   q = c(0.1, 0.5),
   h = c(0.1, 0.2),
@@ -91,3 +91,8 @@ param = list(
 #' @export
 #' @md
 alsroads_default_parameters = param
+
+#' @export
+#' @rdname alsroads_default_parameters
+old_alsroads_default_parameters = param
+old_alsroads_default_parameters$conductivity$r = c(0.2, 0.4)

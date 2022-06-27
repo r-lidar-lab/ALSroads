@@ -1,4 +1,5 @@
 #include <Rcpp.h>
+#include "AnisotropicDiffusion.h"
 using namespace Rcpp;
 
 // [[Rcpp::export]]
@@ -81,4 +82,12 @@ double ffsd(SEXP x)
 
   double var = (sumAllQ - (sumAll * sumAll) / n) * (1.0 / (n - 1));
   return std::sqrt(var);
+}
+
+// [[Rcpp::export]]
+IntegerMatrix anisotropic_diffusion(Rcpp::IntegerMatrix image, unsigned int iterations, double lambda, double k)
+{
+  AnisotropicDiffusion AD(Rcpp::clone(image), iterations, lambda, k);
+  AD.applyDiffusion();
+  return AD.getImage();
 }

@@ -9,6 +9,10 @@ ffsd <- function(x) {
     .Call(`_ALSroads_ffsd`, x)
 }
 
+anisotropic_diffusion <- function(image, iterations, lambda, k) {
+    .Call(`_ALSroads_anisotropic_diffusion`, image, iterations, lambda, k)
+}
+
 quadtree <- function(las) {
     .Call(`_ALSroads_quadtree`, las)
 }

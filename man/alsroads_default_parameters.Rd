@@ -3,12 +3,17 @@
 \docType{data}
 \name{alsroads_default_parameters}
 \alias{alsroads_default_parameters}
+\alias{old_alsroads_default_parameters}
 \title{Parameters}
 \format{
+An object of class \code{list} of length 6.
+
 An object of class \code{list} of length 6.
 }
 \usage{
 alsroads_default_parameters
+
+old_alsroads_default_parameters
 }
 \description{
 Parameters for function \link{measure_road}. Keeping 'as is' is recommended.
