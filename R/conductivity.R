@@ -71,9 +71,11 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
   nlas <- lidR::normalize_height(las, dtm) |> suppressMessages() |> suppressWarnings()
 
   # Terrain metrics using the raster package (slope, roughness)
-  terrain   <- terra::terrain(dtm, opt = c("slope","roughness"), unit = "degrees")
-  slope     <- terrain$slope
-  roughness <- terrain$roughness
+  slope <- terra::terrain(dtm, opt = c("slope"), unit = "degrees")
+
+  smoothdtm <- raster::focal(dtm, matrix(1,5,5), mean)
+  roughdtm <- dtm - smoothdtm
+  roughness <- terra::terrain(roughdtm, opt = c("roughness"))
   #plot(slope, col = gray(1:30/30))
   #plot(roughness, col = gray(1:30/30))
 
