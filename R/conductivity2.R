@@ -120,7 +120,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   e    <- param$conductivity$e
   sobl <- sobel.RasterLayer(slope)
   #plot(sigma_e, col = gray(1:30/30))
-  sigma_e <- activation(sobl, c(1, 20), "piecewise-linear", asc = FALSE)
+  sigma_e <- activation(sobl, e, "piecewise-linear", asc = FALSE)
   sigma_e <- raster::aggregate(sigma_e, fact = 2, fun = mean)
 
   if (display) raster::plot(sigma_e, col = viridis::viridis(25), main = "Conductivity Sobel edges")
@@ -179,7 +179,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   # Notice that the paper makes no mention of smoothing
   q <- param$conductivity$d
 
-  d <- density_gnd_by_flightline(las, dtm, drop_angles = 0)
+  d <- density_gnd_by_flightline(las, sigma_lp, drop_angles = 0)
   d[is.na(d)] = 0
   M   <- matrix(1,3,3)
   d = terra::focal(d, M, mean, na.rm = T)
@@ -190,7 +190,6 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   if (display) raster::plot(d, col = viridis::inferno(15), main = "Density of ground points")
 
   sigma_d <- activation(d, c(0.33, 0.66), "piecewise-linear")
-  sigma_d <- raster::aggregate(sigma_d, fact = 2, fun = mean)
 
   if (display)  raster::plot(sigma_d, col = viridis::inferno(25), main = "Conductivity density")
   verbose("   - Density conductivity map\n")
@@ -208,7 +207,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
 
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Conductivity")
 
-  sigma <- edge_enhancement(sigma)
+  sigma <- edge_enhancement(sigma, interation = 50, lambda = 0.05, k = 20, pass = 2)
 
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Edge enhanced conductivity")
 
@@ -266,11 +265,12 @@ anisotropic_diffusion_filter = function(x, interation = 50, lambda = 0.2, k = 10
   y
 }
 
-edge_enhancement = function(x)
+edge_enhancement = function(x, interation = 50, lambda = 0.05, k = 20, pass = 2)
 {
   #smx = quantile(x[], na.rm = T, probs = 0.99)
-  x = anisotropic_diffusion_filter(x, interation = 50, lambda = 0.05, k = 20)
-  x = anisotropic_diffusion_filter(x, interation = 50, lambda = 0.05, k = 20)
+  for (i in 1:pass)
+    x = anisotropic_diffusion_filter(x, interation, lambda, k)
+
   x = raster::stretch(x, minv = 0, maxv = 1, maxq = 0.995)
   x
 }
