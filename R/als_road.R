@@ -25,9 +25,10 @@
 #' SHOULDERS (average number of shoulders found), SINUOSITY, CONDUCTIVITY (conductivity per linear meters)
 #' SCORE (a road state score) and CLASS (4 classes derived from the SCORE). See references
 #'
-#' @references Roussel, J-R, Achim A (2022). Correction, update, and enhancement of vectorial forestry
-#' road map using ALS data, a pathfinder and seven metrics.
-#'
+#' @references Roussel, J.-R., Bourdon, J.-F., Morley, I. D., Coops, N. C., & Achim, A. (2022).
+#' Correction , update , and enhancement of vectorial forestry road maps using ALS data a pathfinder
+#' and seven metrics. International Journal of Applied Earth Observation and Geoinformation, 114(September),
+#' 103020. https://doi.org/10.1016/j.jag.2022.103020
 #' @export
 #' @examples
 #' library(lidR)
@@ -266,6 +267,15 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   new_road <- sf::st_as_sf(attribute_table)
   sf::st_crs(new_road) <- sf::NA_crs_
   sf::st_crs(new_road) <- crs
+
+  if (new_road$CLASS > 2)
+  {
+    sf::st_geometry(new_road) <- sf::st_geometry(centerline)
+    new_road$ROADWIDTH     <- NA
+    new_road$DRIVABLEWIDTH <- NA
+    new_road$SHOULDERS     <- NA
+    new_road$SINUOSITY     <- NA
+  }
 
 
   verbose("Done\n") ; cat("\n")

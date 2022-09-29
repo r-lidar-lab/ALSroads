@@ -109,6 +109,8 @@ plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 }
 }
 \references{
-Roussel, J-R, Achim A (2022). Correction, update, and enhancement of vectorial forestry
-road map using ALS data, a pathfinder and seven metrics.
+Roussel, J.-R., Bourdon, J.-F., Morley, I. D., Coops, N. C., & Achim, A. (2022).
+Correction , update , and enhancement of vectorial forestry road maps using ALS data a pathfinder
+and seven metrics. International Journal of Applied Earth Observation and Geoinformation, 114(September),
+103020. https://doi.org/10.1016/j.jag.2022.103020
 }

@@ -4,12 +4,12 @@
 \alias{check_road_differences}
 \title{Check amplitude of differences between corrected and uncorrected roads}
 \usage{
-check_road_differences(roads, roads_ori, field)
+check_road_differences(roads, ref, field)
 }
 \arguments{
-\item{roads}{multiples lines (\code{sf} format). Corrected roads.}
+\item{roads}{multiple lines (\code{sf} format). Corrected roads.}
 
-\item{roads_ori}{multiples lines (\code{sf} format). Original non-corrected roads.}
+\item{ref}{multiple lines (\code{sf} format). Original non-corrected roads.}
 
 \item{field}{character. Unique identifier field in both road datasets.}
 }
@@ -23,8 +23,8 @@ Check amplitude of differences between corrected and uncorrected roads
 library(sf)
 
 road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="ALSroads")
-road_ori <- st_read(road, "original", quiet = TRUE)
 road_cor <- st_read(road, "corrected", quiet = TRUE)
+road_ori <- st_read(road, "original", quiet = TRUE)
 
 df <- check_road_differences(road_cor, road_ori, "objectid")
 df
