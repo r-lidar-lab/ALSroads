@@ -268,7 +268,14 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   sf::st_crs(new_road) <- sf::NA_crs_
   sf::st_crs(new_road) <- crs
 
-  if (new_road$CLASS > 2)
+  # Hidden option for JF Bourdons
+  keep_class = dots$keep_class
+  if (is.null(keep_class))
+    keep_class = 2L
+  else
+    stopifnot(is.numeric(keep_class), length(keep_class) == 1)
+
+  if (new_road$CLASS > keep_class)
   {
     sf::st_geometry(new_road) <- sf::st_geometry(centerline)
     new_road$ROADWIDTH     <- NA
