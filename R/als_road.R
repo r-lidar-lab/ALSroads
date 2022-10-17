@@ -300,7 +300,15 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
   res <- lapply(i, function(j)
   {
     if (getOption("ALSroads.debug.verbose") | getOption("ALSroads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
-    measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
+    tryCatch(
+    {
+      measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
+    }
+    error = function(e)
+    {
+      warning(paste0("Error in road ", i, ": NULL returned.\nThe error was: ", e))
+      return(NULL)
+    })
   })
 
   do.call(rbind, res)
