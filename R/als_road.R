@@ -303,7 +303,7 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
     tryCatch(
     {
       measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
-    }
+    },
     error = function(e)
     {
       warning(paste0("Error in road ", i, ": NULL returned.\nThe error was: ", e))
