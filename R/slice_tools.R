@@ -51,7 +51,7 @@ slice_metrics = function(nlas_slice, param)
   road_edges <- c(left, right)
 
   # Using the road edges and vegetation profile we can estimate the derivable edges
-  drivable_edges <- find_drivable_edges(veg_profiles, road_edges, xc)
+  drivable_edges <- find_drivable_edges(veg_profiles, road_edges, xc, param[["vegetation"]][["max_percentage_drivable"]])
 
   # Compute different estimation of the width
   shoulders_width <- round(diff(shoulders_edges), 1)
@@ -287,7 +287,7 @@ find_road_edges = function(profiles, xc, accotement, thsd = 0.1, thz = 0.15)
   return(edges)
 }
 
-find_drivable_edges = function(profiles, true_edges, xc)
+find_drivable_edges = function(profiles, true_edges, xc, th = 0.15)
 {
   Xr <- NULL
   veg_profiles = profiles
@@ -303,12 +303,12 @@ find_drivable_edges = function(profiles, true_edges, xc)
   left = rev(which(veg_profiles$Xr <= xc))
 
   if (length(right) > 0)
-    pos1 = screen_profile(right, veg_profiles$pabove05, NULL, 0.15, NULL)
+    pos1 = screen_profile(right, veg_profiles$pabove05, NULL, th, NULL)
   else
     pos1 = left[1]
 
   if (length(left) > 0)
-    pos2 = screen_profile(left, veg_profiles$pabove05, NULL, 0.15, NULL)
+    pos2 = screen_profile(left, veg_profiles$pabove05, NULL, th, NULL)
   else
     pos2 = right[1]
 

@@ -22,6 +22,10 @@ terrain = list(
   max_elevation_ground_points = 0.15
 )
 
+vegetation = list(
+  max_percentage_drivable = 0.15
+)
+
 conductivity = list(
   sigma_min = 0.1,
   s = c(5, 20),
@@ -45,6 +49,7 @@ param = list(
   extraction = extraction,
   constraint = constraint,
   conductivity = conductivity,
+  vegetation = vegetation,
   embankments = embankments,
   terrain = terrain,
   state = state
