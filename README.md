@@ -1,8 +1,9 @@
+![Lifecycle:Experimental](https://img.shields.io/badge/Lifecycle-Experimental-339999)
 # ALSroads
 
-ALSroads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs du Québec (MFFP)](https://mffp.gouv.qc.ca/). It contains the implementation of the algorithm described in:
+ALSroads provides tools to relocate, measure and estimate the state of forestry roads from an inaccurate map. This project has been made in partnership with the [Ministère des Forêts, de la Faune et des Parcs du Québec (MFFP)](https://mffp.gouv.qc.ca/).  This package is experimental and must be considered as a proof of concept. It contains the implementation of the algorithm described in:
 
-> Jean-Romain Roussel, Jean-François Bourdon , Ilythia D. Morley , Nicholas C. Coops, Alexis Achim (2022). Correction, update, and enhancement of vectorial forestry road maps using ALS data, a pathfinder, and seven metrics. International Journal of Applied Earth Observation and Geoinformation
+> Roussel, J., Bourdon, J., Morley, I. D., Coops, N. C., & Achim, A. (2022). Correction, update, and enhancement of vectorial forestry road maps using ALS data, a pathfinder, and seven metrics. International Journal of Applied Earth Observation and Geoinformation, 114(September), 103020. https://doi.org/10.1016/j.jag.2022.103020
 
 
 ## Installation
@@ -13,7 +14,7 @@ remotes::install_github("Jean-Romain/ALSroads")
 
 ## Example
 
-In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its class nor its width. The algorithm recomputes the accurate location of the road for a lidar point cloud and estimates its width and its state. Here we have an class 1 road with a width of 8 meters.
+In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its class nor its width. The algorithm recomputes the accurate location of the road from a lidar point cloud and estimates its width and its state. Here we have an class 1 road with a width of 8 meters.
 
 ```r
 library(ALSroads)
@@ -25,8 +26,8 @@ library(leaflet)
 
 # Load data (LAS tiles, DTM, map)
 dir  <- system.file("extdata", "", package="ALSroads")
-road <- system.file("extdata", "road_971487.gpkg", package="ALSroads")
-dtm  <- system.file("extdata", "dtm_1m.tif", package="ALSroads")
+road <- system.file("extdata", "j5gr_centerline_971487.gpkg", package="ALSroads")
+dtm  <- system.file("extdata", "j5gr_dtm.tif", package="ALSroads")
 ctg  <- readLAScatalog(dir)
 road <- st_read(road, quiet = TRUE)
 dtm  <- raster(dtm)
