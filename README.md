@@ -14,7 +14,7 @@ remotes::install_github("Jean-Romain/ALSroads")
 
 ## Example
 
-In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its class nor its width. The algorithm recomputes the accurate location of the road for a lidar point cloud and estimates its width and its state. Here we have an class 1 road with a width of 8 meters.
+In the following example we can see a road from reference forestry road maps in red. This road is inaccurately mapped and records neither its class nor its width. The algorithm recomputes the accurate location of the road from a lidar point cloud and estimates its width and its state. Here we have an class 1 road with a width of 8 meters.
 
 ```r
 library(ALSroads)
