@@ -91,14 +91,16 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   # Terrain metrics using the raster package (slope, roughness)
   slope <- terra::terrain(dtm, opt = c("slope"), unit = "degrees")
   if (!is.null(mask)) slope <- raster::mask(slope, mask, inverse = T)
-  #plot(slope, col = gray(1:30/30))
+  if(display) plot(slope, col = gray(1:30/30), main = "slope")
 
   smoothdtm = raster::focal(dtm, matrix(1,5,5), mean)
   roughdtm = dtm - smoothdtm
   roughness <- terra::terrain(roughdtm, opt = c("roughness"), unit = "degrees")
 
-  #plot(roughdtm, col = gray(1:30/30))
-  #plot(roughness, col = gray(1:30/30))
+  if(display) {
+    plot(roughdtm, col = gray(1:30/30), main = "Residual roughness")
+    plot(roughness, col = gray(1:30/30), main = "Roughness")
+  }
 
   # Slope-based conductivity
   s <- param$conductivity$s
@@ -153,7 +155,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   # CHM-based conductivity
   h <- param$conductivity$h
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
-  #plot(chm, col = height.colors(25))
+  if (display) plot(chm, col = height.colors(25),  main = "CHM")
   sigma_h <- dtm
   sigma_h <- activation(chm, h, "piecewise-linear", asc = FALSE)
   sigma_h <- raster::aggregate(sigma_h, fact = 2, fun = mean)
@@ -222,6 +224,20 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   if (display) raster::plot(sigma, col = viridis::inferno(25), main = "Edge enhanced conductivity with bridge")
 
   if (pkg == "terra") sigma <- terra::rast(sigma)
+
+  dots = list(...)
+
+  if (!is.null(dots$rawlayer))
+  {
+   dtm2 = raster::aggregate(dtm, fact = 2, fun = mean)
+   slope2 = raster::aggregate(slope, fact = 2, fun = mean)
+   roughness2 =  raster::aggregate(roughness, fact = 2, fun = mean)
+   chm2 =  raster::aggregate(chm, fact = 2, fun = mean)
+   lp2 =  raster::aggregate(lp, fact = 2, fun = mean)
+   sobl2 =  raster::aggregate(sobl, fact = 2, fun = mean)
+   u = raster::stack(slope2, roughness2, chm2, sigma_i, lp2, d, sobl2)
+   return(u)
+  }
 
   return(sigma)
 }
