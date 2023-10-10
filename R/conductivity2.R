@@ -236,6 +236,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
    lp2 =  raster::aggregate(lp, fact = 2, fun = mean)
    sobl2 =  raster::aggregate(sobl, fact = 2, fun = mean)
    u = raster::stack(slope2, roughness2, chm2, sigma_i, lp2, d, sobl2)
+   names(u) = c("slope", 'rought', "chm", "intensity", "low", "density", "sobel")
    return(u)
   }
 
