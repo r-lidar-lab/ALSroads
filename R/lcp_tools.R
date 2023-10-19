@@ -158,8 +158,8 @@ mask_conductivity <- function(conductivity, centerline, param)
 start_end_points = function(centerline, param)
 {
   caps <- make_caps(centerline, param)$caps
-  P <- sf::st_cast(caps, "POLYGON")
-  C <- sf::st_centroid(P)
+  #P <- sf::st_cast(caps, "POLYGON")
+  C <- sf::st_centroid(caps)
   A <- sf::st_coordinates(C[1])
   B <- sf::st_coordinates(C[2])
   return(list(A = A, B = B))
@@ -245,6 +245,7 @@ transition <- function(conductivity, directions = 8, geocorrection = TRUE)
 find_path = function(trans, centerline, A, B, param)
 {
   caps <- make_caps(centerline, param)$caps
+  caps <- sf::st_union(caps)
   trans@crs <- methods::as(sf::NA_crs_, "CRS") # workaround to get rid of rgdal warning
 
   cost <- gdistance::costDistance(trans, A, B)
@@ -335,7 +336,7 @@ make_caps <- function(centerline, param)
     caps_B <- caps_B[which.max(sf::st_area(caps_B))]
 
   caps <- c(caps_A, caps_B)
-  caps <- sf::st_union(caps)
+  #caps <- sf::st_union(caps)
   shield <- sf::st_difference(sf::st_buffer(sf::st_union(caps, sf::st_union(poly1, poly2)), 0.01), shield)
 
   sf::st_crs(caps) <- sf::st_crs(centerline)
