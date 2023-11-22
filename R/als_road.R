@@ -278,10 +278,6 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   if (new_road$CLASS > keep_class)
   {
     sf::st_geometry(new_road) <- sf::st_geometry(centerline)
-    new_road$ROADWIDTH     <- NA
-    new_road$DRIVABLEWIDTH <- NA
-    new_road$SHOULDERS     <- NA
-    new_road$SINUOSITY     <- NA
   }
 
 
@@ -316,15 +312,32 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
 
 alert_no_index <- function(ctg)
 {
+  is_copc = substr(ctg$filename, nchar(ctg$filename)-8, nchar(ctg$filename))
+  if (all(is_copc == ".copc.laz"))
+  {
+    if (utils::packageVersion("rlas") >= "1.7.0")
+      return(invisible())
+    else
+      message(paste0("copc files are supported using package rlas >= 1.7.0. Currently installed: ", utils::packageVersion("rlas")))
+  }
+
   if (!lidR::is.indexed(ctg))
   {
     d <- lidR::density(ctg)
     if (d < 5)
+    {
       message("No spatial index for LAS/LAZ files in this collection.")
+      return(invisible())
+    }
     else if (d < 10)
+    {
       warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+      return(invisible())
+    }
     else
-      stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    {
+      stop("No spatial index for LAS/LAZ files in this collection.")
+    }
   }
 }
 

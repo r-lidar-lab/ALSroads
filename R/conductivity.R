@@ -52,7 +52,8 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
     res <- round(raster::res(dtm)[1], 2)
     if (res > 1) stop("The DTM must have a resolution of 1 m or less.")
 
-    dtm <- raster::crop(dtm, lidR::extent(las))
+    bb = lidR::st_bbox(las)
+    dtm <- raster::crop(dtm, raster::extent(bb))
 
     if (res < 1)
       dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
