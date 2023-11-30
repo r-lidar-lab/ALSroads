@@ -14,7 +14,7 @@
 #' @examples
 #' library(sf)
 #'
-#' network   <- system.file("extdata", "road_network.gpkg", package="ALSroads")
+#' network   <- system.file("extdata", "j53e_network.gpkg", package="ALSroads")
 #' network   <- st_read(network, "invalid_topology")
 #' junctions <- st_check_junctions(network)
 #'
@@ -35,7 +35,7 @@
 #' }
 #'
 #' # simple snapping (see ?st_snap_lines)
-#' network <- st_snap_lines(network)
+#' network <- st_snap_lines(network)$roads
 #'
 #' par(mfrow = c(1,2))
 #' for (k in 1:2)
@@ -106,7 +106,7 @@ st_check_junctions = function(roads, tolerance = 8)
 #' @examples
 #' library(sf)
 #'
-#' network <- system.file("extdata", "road_network.gpkg", package="ALSroads")
+#' network <- system.file("extdata", "j53e_network.gpkg", package="ALSroads")
 #' network <- st_read(network, "invalid_topology")
 #'
 #' crossings <- st_check_crossings(network)

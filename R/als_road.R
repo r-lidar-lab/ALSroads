@@ -6,7 +6,7 @@
 #' classes. The function \link{st_snap_lines} allows to post-process the output to fix minor inaccuracies
 #'  and reconnect the roads that may no longer be connected because each road is processed independently.
 #'
-#' @param road a single linestring (sf format) used as reference to search and measure the road.
+#' @param centerline a single linestring (sf format) used as reference to search and measure the road.
 #' @param roads multiple lines (sf format) used as reference to search and measure the roads
 #' @param ctg a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package
 #' @param dtm RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed

@@ -14,24 +14,25 @@ Imports:
     sf,
     zoo,
     stats,
-    Rcpp,
     data.table,
     dplyr,
     raster,
+    terra,
     lwgeom,
     glue,
     methods,
     utils,
     gdistance,
     EBImage,
-    rgdal,
-    rgeos,
+    Matrix,
     fasterize,
+    sp
 Suggests:
+    rgeos,
     mapview,
     leaflet,
     viridis
-RoxygenNote: 7.2.0
+RoxygenNote: 7.2.3
 LinkingTo: 
     Rcpp,
     lidR

@@ -35,6 +35,8 @@ rasterize_conductivity <- function(las, dtm = NULL, param = alsroads_default_par
 #' @export
 rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default_parameters, ...)
 {
+  PointSourceID <- nIntensity <- f <- NULL
+
   use_intensity <- "Intensity" %in% names(las)
   display <- getOption("ALSroads.debug.finding")
   dots <- list(...)
@@ -116,9 +118,9 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
     # Normalize intensity o different flightlins
     if (data.table::uniqueN(nlas$PointSourceID) > 1)
     {
-      u <- nlas@data[, list(N = .N, Imin = min(Intensity), Imean = as.numeric(median(Intensity)), Isd = fsd(Intensity)), by = PointSourceID]
+      u <- nlas@data[, list(N = .N, Imin = min(Intensity), Imean = as.numeric(stats::median(Intensity)), Isd = fsd(Intensity)), by = PointSourceID]
       data = nlas@data[, c("PointSourceID", "Intensity")]
-      data[, nIntensity := (Intensity - mean(Intensity))/sd(Intensity), by = PointSourceID]
+      data[, nIntensity := (Intensity - mean(Intensity))/stats::sd(Intensity), by = PointSourceID]
       data[is.na(nIntensity), nIntensity := 0]
 
       i <- which.max(u$N)
@@ -143,7 +145,7 @@ rasterize_conductivity.LAS <- function(las, dtm = NULL, param = alsroads_default
     irange <- imax - imin
     nlas@data[["Z"]] <- Z
 
-    if (display) raster::plot(irange, col = heat.colors(20), main = "Intensity range")
+    if (display) raster::plot(irange, col = grDevices::heat.colors(20), main = "Intensity range")
 
     th <- stats::quantile(irange[], probs = q, na.rm = TRUE)
     sigma_i <- dtm
