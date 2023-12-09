@@ -199,6 +199,11 @@ road_score = function(metrics, param)
   S     <- metrics$SHOULDERS
   Sigma <- metrics$CONDUCTIVITY
 
+  verbose("P = ", P, "\n")
+  verbose("W = ", W, "\n")
+  verbose("S = ", S, "\n")
+  verbose("Sigma = ", Sigma, "\n")
+
   # The overall state is the median state
   # Estimate the existence of a road in the segment based on percentage of veg points and width
   p <- param[["state"]][["percentage_veg_thresholds"]]

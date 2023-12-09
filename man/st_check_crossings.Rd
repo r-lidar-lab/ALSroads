@@ -20,7 +20,7 @@ network.
 \examples{
 library(sf)
 
-network <- system.file("extdata", "road_network.gpkg", package="ALSroads")
+network <- system.file("extdata", "j53e_network.gpkg", package="ALSroads")
 network <- st_read(network, "invalid_topology")
 
 crossings <- st_check_crossings(network)

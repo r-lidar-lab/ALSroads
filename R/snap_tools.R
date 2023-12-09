@@ -47,7 +47,7 @@ st_snap_lines = function(roads, ref, tolerance = 30, field = NULL, updatable = N
 
   if (is.null(updatable))
     updatable <- rep(TRUE, nrow(roads))
-  
+
   return(advanced_snap(roads, ref, field, tolerance, updatable))
 }
 
@@ -113,7 +113,7 @@ simple_snap <- function(roads, tolerance)
 
 advanced_snap <- function(roads, ref, field, tolerance, updatable)
 {
-  X <- Y <- id <- SCORE <- CLASS <- NULL
+  X <- Y <- id <- SCORE <- CLASS <- UPDATABLE <- NULL
 
   IDs1 <- sort(unique(roads[[field]]))
   IDs2 <- sort(unique(ref[[field]]))
@@ -519,6 +519,8 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
 #' @noRd
 find_best_connexion <- function(tb_node)
 {
+  CLASS <- NULL
+
   # Update CLASS 0 to CLASS 5 in order to get a constant
   # quality gradient from 1 to 5 for an easier sort
   tb_node <- dplyr::mutate(tb_node, CLASS = ifelse(CLASS == 0, 5, CLASS))
@@ -543,6 +545,8 @@ find_best_connexion <- function(tb_node)
   tolerance_angle <- 7.5  # Allow angle up to 7.5° more
   idx_max <- which.max(comb_angle)[1]
   comb_angle[comb_angle >= comb_angle[idx_max] - tolerance_angle] <- 180
+
+  comb_class <- comb_score <- NULL
 
   # Build similarity table using all permutations
   tb_similarity <-
