@@ -292,7 +292,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # Find intersection points between the remaining
     # segments and the bridge. The intersection point
     # is given as the distance on the path between
-    # the begining of the bridge and intersection point
+    # the beginning of the bridge and the intersection point.
     remain_ids <- IDs[!(IDs %in% bridge_ids)]
     tb_node_remain <- dplyr::filter(tb_node_cor, id %in% remain_ids)
 
@@ -314,7 +314,7 @@ advanced_snap <- function(roads, ref, field, tolerance, updatable)
     # Make sure all intersections occur within the tolerance
     # value of the mean junction otherwise skip snapping
     # this node and throw warning
-    dist_junction_bridge <- rgeos::gProject(sf::as_Spatial(bridge[["bridge"]]), sf::as_Spatial(bridge[["junction"]]))
+    dist_junction_bridge <- st_split_at_point(bridge[["junction"]], bridge[["bridge"]])[1] |> sf::st_length() |> as.numeric()
 
     no_intersection <- sapply(dist_bridge, is.na)
     dist_junction_diff <- abs(dist_bridge - dist_junction_bridge)
@@ -488,18 +488,15 @@ distance_line_intersection <- function(crossing_line, reference_line, reference_
   sf::st_crs(reference_line) <- NA
   sf::st_crs(reference_point) <- NA
 
-  intersect_pts <- sf::st_intersection(reference_line, crossing_line)
-
-  if (length(intersect_pts) == 0) return(NA)
-
+  split_at_crossing <- lwgeom::st_split(reference_line, crossing_line) |> sf::st_collection_extract("LINESTRING")
+  
+  if (length(split_at_crossing) == 1) return(NA)
+  
   # Compute distance between each crossing of the
   # reference line and the reference point on this line
   # and only keep the closest crossing
-  sp_line <- sf::as_Spatial(reference_line)
-  sp_intersect <- sf::as_Spatial(sf::st_cast(intersect_pts, "POINT"))
-
-  dist_intersect <- sapply(seq_along(sp_intersect), function(k) rgeos::gProject(sp_line, sp_intersect[k]))
-  dist_point <- rgeos::gProject(sp_line, sf::as_Spatial(reference_point))
+  dist_intersect <- sapply(head(split_at_crossing, -1), sf::st_length) |> cumsum()
+  dist_point <- st_split_at_point(reference_point, reference_line)[1] |> sf::st_length()
   dist_intersect_closest <- dist_intersect[which.min(abs(dist_intersect - dist_point))]
 
   return(dist_intersect_closest)
