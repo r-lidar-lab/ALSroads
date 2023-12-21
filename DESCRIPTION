@@ -28,7 +28,6 @@ Imports:
     fasterize,
     sp
 Suggests:
-    rgeos,
     mapview,
     leaflet,
     viridis

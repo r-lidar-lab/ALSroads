@@ -61,9 +61,8 @@ st_extend_line <- function(line, distance, end = "BOTH")
 
 #' Get point from distance on a line
 #'
-#' This is essentially the reverse of rgeos::gProject(). It must be noted
-#' that due floating point precision limitation, the point returned won't be
-#' exactly on the line and thus won't split it.
+#' It must be noted that due floating point precision limitation,
+#' the point returned won't be exactly on the line and thus won't split it.
 #'
 #' @param distance  distance on the \code{line} at which the coordinates will be retrieved.
 #' @param line  line (\code{sfc} format)
