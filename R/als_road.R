@@ -298,7 +298,13 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
     if (getOption("ALSroads.debug.verbose") | getOption("ALSroads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
     tryCatch(
     {
-      measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
+      withCallingHandlers(
+        measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE),
+        warning = function(w) {
+          warning(paste0("Warning in road ", j, ": ", conditionMessage(w)))
+          invokeRestart("muffleWarning") # Suppress warning after handling
+        }
+      )
     },
     error = function(e)
     {
