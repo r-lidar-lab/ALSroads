@@ -9,7 +9,7 @@ ALSroads provides tools to relocate, measure and estimate the state of forestry 
 ## Installation
 
 ``` r
-remotes::install_github("Jean-Romain/ALSroads")
+remotes::install_github("metafor-ulaval/ALSroads")
 ```
 
 ## Example
