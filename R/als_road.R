@@ -6,7 +6,7 @@
 #' classes. The function \link{st_snap_lines} allows to post-process the output to fix minor inaccuracies
 #'  and reconnect the roads that may no longer be connected because each road is processed independently.
 #'
-#' @param road a single linestring (sf format) used as reference to search and measure the road.
+#' @param centerline a single linestring (sf format) used as reference to search and measure the road.
 #' @param roads multiple lines (sf format) used as reference to search and measure the roads
 #' @param ctg a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package
 #' @param dtm RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
@@ -25,9 +25,10 @@
 #' SHOULDERS (average number of shoulders found), SINUOSITY, CONDUCTIVITY (conductivity per linear meters)
 #' SCORE (a road state score) and CLASS (4 classes derived from the SCORE). See references
 #'
-#' @references Roussel, J-R, Achim A (2022). Correction, update, and enhancement of vectorial forestry
-#' road map using ALS data, a pathfinder and seven metrics.
-#'
+#' @references Roussel, J.-R., Bourdon, J.-F., Morley, I. D., Coops, N. C., & Achim, A. (2022).
+#' Correction , update , and enhancement of vectorial forestry road maps using ALS data a pathfinder
+#' and seven metrics. International Journal of Applied Earth Observation and Geoinformation, 114(September),
+#' 103020. https://doi.org/10.1016/j.jag.2022.103020
 #' @export
 #' @examples
 #' library(lidR)
@@ -267,6 +268,18 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   sf::st_crs(new_road) <- sf::NA_crs_
   sf::st_crs(new_road) <- crs
 
+  # Hidden option for JF Bourdons
+  keep_class = dots$keep_class
+  if (is.null(keep_class))
+    keep_class = 2L
+  else
+    stopifnot(is.numeric(keep_class), length(keep_class) == 1)
+
+  if (new_road$CLASS > keep_class)
+  {
+    sf::st_geometry(new_road) <- sf::st_geometry(centerline)
+  }
+
 
   verbose("Done\n") ; cat("\n")
   new_road <- rename_sf_column(new_road, centerline)
@@ -283,7 +296,15 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
   res <- lapply(i, function(j)
   {
     if (getOption("ALSroads.debug.verbose") | getOption("ALSroads.debug.progress")) cat("Road", j, "of", nrow(roads), " ")
-    measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
+    tryCatch(
+    {
+      measure_road(ctg, roads[j,], dtm, conductivity, water, param, Windex = FALSE)
+    },
+    error = function(e)
+    {
+      warning(paste0("Error in road ", i, ": NULL returned.\nThe error was: ", e))
+      return(NULL)
+    })
   })
 
   do.call(rbind, res)
@@ -291,15 +312,32 @@ measure_roads = function(ctg, roads, dtm, conductivity = NULL, water = NULL, par
 
 alert_no_index <- function(ctg)
 {
+  is_copc = substr(ctg$filename, nchar(ctg$filename)-8, nchar(ctg$filename))
+  if (all(is_copc == ".copc.laz"))
+  {
+    if (utils::packageVersion("rlas") >= "1.7.0")
+      return(invisible())
+    else
+      message(paste0("copc files are supported using package rlas >= 1.7.0. Currently installed: ", utils::packageVersion("rlas")))
+  }
+
   if (!lidR::is.indexed(ctg))
   {
     d <- lidR::density(ctg)
     if (d < 5)
+    {
       message("No spatial index for LAS/LAZ files in this collection.")
+      return(invisible())
+    }
     else if (d < 10)
+    {
       warning("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+      return(invisible())
+    }
     else
-      stop("No spatial index for LAS/LAZ files in this collection.", call. = FALSE)
+    {
+      stop("No spatial index for LAS/LAZ files in this collection.")
+    }
   }
 }
 

@@ -27,6 +27,8 @@ measure_roads(
 \arguments{
 \item{ctg}{a non-normalized \link[lidR:LAScatalog-class]{LAScatalog} object from lidR package}
 
+\item{centerline}{a single linestring (sf format) used as reference to search and measure the road.}
+
 \item{dtm}{RasterLayer storing the DTM with a resolution of at least of 1 m. Can be computed
 with \link[lidR:grid_terrain]{grid_terrain}. It can be missing if a conductivity layer is provided}
 
@@ -42,8 +44,6 @@ to detect bridges above water.}
 \item{...}{unused}
 
 \item{roads}{multiple lines (sf format) used as reference to search and measure the roads}
-
-\item{road}{a single linestring (sf format) used as reference to search and measure the road.}
 }
 \value{
 An sf object similar to the input with additional attributes and an updated geometry. If
@@ -109,6 +109,8 @@ plot(st_geometry(res), col = "blue", add = TRUE) # Corrected road track
 }
 }
 \references{
-Roussel, J-R, Achim A (2022). Correction, update, and enhancement of vectorial forestry
-road map using ALS data, a pathfinder and seven metrics.
+Roussel, J.-R., Bourdon, J.-F., Morley, I. D., Coops, N. C., & Achim, A. (2022).
+Correction , update , and enhancement of vectorial forestry road maps using ALS data a pathfinder
+and seven metrics. International Journal of Applied Earth Observation and Geoinformation, 114(September),
+103020. https://doi.org/10.1016/j.jag.2022.103020
 }

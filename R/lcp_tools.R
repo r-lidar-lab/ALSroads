@@ -173,13 +173,13 @@ transition <- function(conductivity, directions = 8, geocorrection = TRUE)
   x = conductivity
   use_terra = FALSE
 
-  if (is(x, "RasterLayer"))
+  if (methods::is(x, "RasterLayer"))
   {
     bb = raster::extent(x)
     ncells = raster::ncell(x)
     val = raster::values(x)
   }
-  else if (is(x, "SpatRaster"))
+  else if (methods::is(x, "SpatRaster"))
   {
     bb = terra::ext(x)
     bb = raster::extent(bb[1:4])
@@ -194,7 +194,7 @@ transition <- function(conductivity, directions = 8, geocorrection = TRUE)
 
   symm = TRUE
 
-  tr <- new("TransitionLayer",
+  tr <- methods::new("TransitionLayer",
             nrows=as.integer(nrow(x)),
             ncols=as.integer(ncol(x)),
             extent=bb,
