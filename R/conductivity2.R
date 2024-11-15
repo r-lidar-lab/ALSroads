@@ -1,39 +1,12 @@
-#' Compute the conductivity raster sigma
-#'
-#' Compute the conductivity raster sigma from lidar data according to Roussel et al. 2020
-#' (see references)
-#'
-#' @param las an object of class LAS or LAScatalog from lidR
-#' @param dtm RasterLayer. If NULL is provided a DTM is computed on the fly. But if a DTM is already
-#' available it can be given to the function.
-#' @param param a list of many parameters. See \link{alsroads_default_parameters}.
-#' @param ... ignored
-#'
-#' @examples
-#' library(lidR)
-#' library(raster)
-#' dir  <- system.file("extdata", "", package="ALSroads")
-#' dtm  <- system.file("extdata", "j5gr_dtm.tif", package="ALSroads")
-#' ctg  <- readLAScatalog(dir)
-#' dtm  <- raster(dtm)
-#' las  <- readLAS(ctg$filename[1])
-#'
-#' sigma <- rasterize_conductivity2(las, dtm = dtm)
-#' plot(sigma, col = viridis::inferno(30))
-#'
-#' \donttest{
-#' sigma <- rasterize_conductivity2(ctg, dtm = dtm)
-#' plot(sigma, col = viridis::viridis(30))
-#' }
-#' @return a RasterLayer or SpatRaster
 #' @export
-rasterize_conductivity2 <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+#' @rdname rasterize_conductivity
+rasterize_conductivity2 <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters2, ...)
 {
   UseMethod("rasterize_conductivity2", las)
 }
 
 #' @export
-rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters2, ...)
 {
   use_intensity <- "Intensity" %in% names(las)
   display <- getOption("ALSroads.debug.finding")
@@ -48,7 +21,8 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
     res <- round(raster::res(dtm)[1], 2)
     if (res > 1) stop("The DTM must have a resolution of 1 m or less.")
 
-    dtm <- raster::crop(dtm, lidR::extent(las))
+    bb = lidR::st_bbox(las)
+    dtm <- raster::crop(dtm, raster::extent(bb))
 
     if (res < 1)
       dtm <- raster::aggregate(dtm, fact = 1/res, fun = mean)
@@ -91,15 +65,15 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   # Terrain metrics using the raster package (slope, roughness)
   slope <- terra::terrain(dtm, opt = c("slope"), unit = "degrees")
   if (!is.null(mask)) slope <- raster::mask(slope, mask, inverse = T)
-  if(display) plot(slope, col = gray(1:30/30), main = "slope")
+  if(display) raster::plot(slope, col = gray(1:30/30), main = "slope")
 
   smoothdtm = raster::focal(dtm, matrix(1,5,5), mean)
   roughdtm = dtm - smoothdtm
   roughness <- terra::terrain(roughdtm, opt = c("roughness"), unit = "degrees")
 
   if(display) {
-    plot(roughdtm, col = gray(1:30/30), main = "Residual roughness")
-    plot(roughness, col = gray(1:30/30), main = "Roughness")
+    raster::plot(roughdtm, col = gray(1:30/30), main = "Residual roughness")
+    raster::plot(roughness, col = gray(1:30/30), main = "Roughness")
   }
 
   # Slope-based conductivity
@@ -155,7 +129,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
   # CHM-based conductivity
   h <- param$conductivity$h
   chm <- lidR::grid_canopy(nlas, dtm, lidR::p2r())
-  if (display) plot(chm, col = height.colors(25),  main = "CHM")
+  if (display) raster::plot(chm, col = height.colors(25),  main = "CHM")
   sigma_h <- dtm
   sigma_h <- activation(chm, h, "piecewise-linear", asc = FALSE)
   sigma_h <- raster::aggregate(sigma_h, fact = 2, fun = mean)
@@ -244,7 +218,7 @@ rasterize_conductivity2.LAS <- function(las, dtm = NULL, water = NULL, param = a
 }
 
 #' @export
-rasterize_conductivity2.LAScluster = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity2.LAScluster = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters2, ...)
 {
   x <- lidR::readLAS(las)
   if (lidR::is.empty(x)) return(NULL)
@@ -255,7 +229,7 @@ rasterize_conductivity2.LAScluster = function(las, dtm = NULL, water = NULL, par
 }
 
 #' @export
-rasterize_conductivity2.LAScatalog = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters, ...)
+rasterize_conductivity2.LAScatalog = function(las, dtm = NULL, water = NULL, param = alsroads_default_parameters2, ...)
 {
   # Enforce some options
   if (lidR::opt_select(las) == "*") lidR::opt_select(las) <- "xyzciap"
@@ -291,3 +265,187 @@ edge_enhancement = function(x, interation = 50, lambda = 0.05, k = 20, pass = 2)
   x = raster::stretch(x, minv = 0, maxv = 1, maxq = 0.995)
   x
 }
+
+intensity_range_by_flightline <- function(las, res)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(las$PointSourceID)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_intensityrange(las, res)
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(las, PointSourceID == i)
+    q = quantile(psi$Intensity, probs = 0.95)
+    psi@data[Intensity>q, Intensity := q]
+    ans[[as.character(i)]] <- rasterize_intensityrange(psi, res)
+  }
+
+  ans =terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans = terra::stretch(ans, maxv = 1)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::app(ans, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+density_gnd_by_flightline <- function(las, res, drop_angles = 3)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(las$PointSourceID)
+  gnd = filter_ground(las)
+  angle_max = max(abs(las$ScanAngleRank))
+  gnd = filter_poi(gnd, abs(ScanAngleRank) < angle_max-drop_angles)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_density(gnd, res)
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(gnd, PointSourceID == i)
+    d <- rasterize_density(psi, res)
+    d[d == 0] = NA
+    q = quantile(d[], probs = 0.95, na.rm = TRUE)
+    d[d>q] = q
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans = terra::stretch(ans, maxv = 1)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::app(ans, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+density_lp_by_flightline <- function(las, res)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(las$PointSourceID)
+  z1  <- 0.5
+  z2  <- 3
+  tmp <- lidR::filter_poi(las, Z > z1, Z < z2)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_density(gnd, res)
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids)
+  {
+    psi <- lidR::filter_poi(tmp, PointSourceID == i)
+    d <- rasterize_density(psi, res)
+    d[d == 0] = NA
+    q = quantile(d[], probs = 0.95, na.rm = TRUE)
+    d[d>q] = q
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans = terra::stretch(ans, maxv = 1)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::app(ans, fun = max, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+low_points_by_flightline <- function(nlas, res, th = 2)
+{
+  .N <- PointSourceID <- NULL
+
+  z1 <- 0.5
+  z2 <- 3
+  res <- terra::rast(res)
+  ids <- unique(nlas$PointSourceID)
+
+  if (length(ids) == 1)
+  {
+    tmp <- lidR::filter_poi(nlas, Z > z1, Z < z2)
+    ans = lidR:::rasterize_fast(tmp, res, 0, "count", pkg = "terra")
+    return(raster::raster(ans > th))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(nlas, PointSourceID == i, Z > z1, Z < z2)
+    d <- lidR:::rasterize_fast(psi, res, 0, "count", pkg = "terra")
+    d[is.na(d)] = 0
+    ans[[as.character(i)]] = d <= 3
+  }
+
+  ans = terra::rast(ans)
+  #plot(ans, col = heat.colors(50))
+  ans <- terra::app(ans, fun = min, na.rm = TRUE)
+  #plot(ans, col = heat.colors(50))
+  return(raster::raster(ans))
+}
+
+chm_by_flightline <- function(nlas, res)
+{
+  .N <- PointSourceID <- NULL
+
+  res <- terra::rast(res)
+  ids <- unique(nlas$PointSourceID)
+
+  if (length(ids) == 1)
+  {
+    ans = rasterize_canopy(nlas, res, p2r())
+    return(raster::raster(ans))
+  }
+
+  ans <- vector("list", 0)
+  for (i in ids) {
+    psi <- lidR::filter_poi(nlas, PointSourceID == i)
+    d <- rasterize_canopy(psi, res, lidR::p2r())
+    ans[[as.character(i)]] = d
+  }
+
+  ans = terra::rast(ans)
+  ans = terra::mask(ans, terra::vect(water), inverse = T)
+  #plot(ans, col = height.colors(50))
+  ans = terra::stretch(ans, minv = 0)
+  #plot(ans, col = height.colors(50))
+  ans <- terra::app(ans, fun = min, na.rm = TRUE)
+  #plot(ans, col = height.colors(50))
+  ans =  ans - min(ans[], na.rm = TRUE)
+  #plot(ans, col = height.colors(50))
+
+  return(raster::raster(ans))
+}
+
+
+rasterize_intensityrange <- function(las, res)
+{
+  # Detect outliers of intensity and change their value. This is not perfect but avoid many troubles
+  Intensity <- NULL
+  outliers <- as.integer(stats::quantile(las$Intensity, probs = 0.98))
+  las@data[Intensity > outliers, Intensity := outliers]
+
+  # Switch Z and Intensity trick to use fast lidR internal function
+  Z <- las[["Z"]]
+  las@data[["Z"]] <-  las@data[["Intensity"]]
+  imax <- lidR:::rasterize_fast(las, res, 0, "max")
+  imin <- lidR:::rasterize_fast(las, res, 0, "min")
+  irange <- imax - imin
+  return(irange)
+}
+
+

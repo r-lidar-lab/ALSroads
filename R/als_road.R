@@ -93,7 +93,7 @@ measure_road = function(ctg, centerline, dtm = NULL, conductivity = NULL, water 
   if (sf::st_is_longlat(centerline)) stop("Expecting a projected CRS for 'centerline' but found geographic CRS instead.", call. = FALSE)
   if (param[["extraction"]][["road_max_width"]] > param[["extraction"]][["road_buffer"]]) stop("'road_max_width' parameter must be smaller than 'road_buffer' parameter", call. = FALSE)
   if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
-  if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
+  #if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
   crs <- sf::st_crs(centerline)
 
   # If the collection is not indexed we throw a warning and even an error if the density is high

@@ -30,7 +30,7 @@ conductivity = list(
   sigma_min = 0.1,
   s = c(5, 20),
   r = c(0.05, 0.1),
-  e = c(1,20),
+  e = 40,
   q = c(0.1, 0.5),
   h = c(0.1, 0.2),
   d = c(0.25, 0.95),
@@ -100,5 +100,5 @@ alsroads_default_parameters = param
 
 #' @export
 #' @rdname alsroads_default_parameters
-old_alsroads_default_parameters = param
-old_alsroads_default_parameters$conductivity$r = c(0.2, 0.4)
+alsroads_default_parameters2 = param
+alsroads_default_parameters2$conductivity$e = c(1,20)

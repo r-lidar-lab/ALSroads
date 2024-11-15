@@ -14,8 +14,8 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
 {
   display <- getOption("ALSroads.debug.finding")
 
-  if (is.null(dtm) & is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
-  if (!is.null(dtm) & !is.null(conductivity)) stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
+  if (is.null(dtm) && is.null(conductivity)) stop("'dtm' and 'conductivity' cannot be both NULL", call. = FALSE)
+  if (!is.null(dtm) && !is.null(conductivity) && conductivity != "v2") stop("'dtm' or 'conductivity' must be NULL", call. = FALSE)
 
   # Compute the limit polygon where we actually need to work
   # This allows to crop the raster (DTM or conductivty) and extract
@@ -25,7 +25,7 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
   # Clip and mask the conductivity (if provided)
   # If the conductivity has a resolution more than 2 m, aggregate to 2 m.
   # If the resolution is less than 2 meter, abort.
-  if (!is.null(conductivity))
+  if (inherits(conductivity, "RasterLayer"))
   {
     conductivity <- raster::crop(conductivity, hold)
     conductivity <- raster::mask(conductivity, hold)
@@ -37,6 +37,12 @@ least_cost_path = function(las, centerline, dtm, conductivity, water, param)
 
     if (res < 2)
       conductivity <- raster::aggregate(conductivity, fact = 2/res, fun = mean, na.rm = TRUE)
+  }
+
+  if (is.character(conductivity) && conductivity == "v2")
+  {
+    verbose("Computing conductivity maps...\n")
+    conductivity <- rasterize_conductivity2(las, dtm = dtm, param = param, return_all = FALSE, return_stack = FALSE)
   }
 
   # If no conductivity is provided it means that the DTM is. We compute the conductivity
